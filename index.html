@@ -501,12 +501,11 @@
         localStorage.clear();
         sessionStorage.clear();
         await window.Clerk.signOut();
-        // Redirect to Clerk's sign-in page
-        window.Clerk.redirectToSignIn();
+        window.location.href = 'login.html';
     } catch (error) {
         console.error('Sign out error:', error);
         localStorage.clear();
-        window.Clerk.redirectToSignIn();
+        window.location.href = 'login.html';
     }
 };
 

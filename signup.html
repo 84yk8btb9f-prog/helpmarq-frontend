@@ -44,9 +44,15 @@
             return;
         }
         
-        // Redirect to Clerk's hosted sign-up page
-        window.Clerk.redirectToSignUp({
-            afterSignUpUrl: window.location.origin + '/role-select.html'
+        const signUpDiv = document.getElementById('clerk-signup');
+        
+        window.Clerk.mountSignUp(signUpDiv, {
+            afterSignUpUrl: window.location.origin + '/role-select.html',
+            appearance: {
+                elements: {
+                    footerActionLink: { display: 'none' }
+                }
+            }
         });
     });
 </script>

@@ -44,10 +44,15 @@
             return;
         }
         
-        // Redirect to Clerk's hosted sign-in page
-        window.Clerk.redirectToSignIn({
+        const signInDiv = document.getElementById('clerk-signin');
+        
+        window.Clerk.mountSignIn(signInDiv, {
             afterSignInUrl: window.location.origin + '/index.html',
-            afterSignUpUrl: window.location.origin + '/role-select.html'
+            appearance: {
+                elements: {
+                    footerActionLink: { display: 'none' }
+                }
+            }
         });
     });
 </script>
