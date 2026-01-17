@@ -137,9 +137,9 @@ let currentUser = null;
 let userRole = null;
 let currentReviewerId = null;
 
-const API_URL = process.env.NODE_ENV === 'production' 
-    ? 'https://your-backend-url.railway.app/api'  // Will update this later
-    : 'http://localhost:3000/api';
+const API_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000/api'
+    : 'https://helpmarq-backend.onrender.com'; 
     
 // State
 let currentProjectForApplication = null;
