@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelpMarq - Choose Your Role</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card role-select-card">
+            <div class="auth-header">
+                <h1>Welcome to HelpMarq!</h1>
+                <p class="tagline">Choose how you want to get started</p>
+            </div>
+            
+            <div class="role-options">
+                <div class="role-card" onclick="selectRole('owner')">
+                    <div class="role-icon">📊</div>
+                    <h3>Project Owner</h3>
+                    <p>Upload projects and get expert feedback</p>
+                    <button class="btn-primary">I'm a Project Owner</button>
+                </div>
+                
+                <div class="role-card" onclick="selectRole('reviewer')">
+                    <div class="role-icon">⭐</div>
+                    <h3>Reviewer</h3>
+                    <p>Review projects and earn income</p>
+                    <button class="btn-primary">I'm a Reviewer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script 
+        async 
+        crossorigin="anonymous" 
+        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
+        onload="window.Clerk.load()"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
+    ></script>
+
+    <script>
+        window.addEventListener('load', async () => {
+            console.log('Role select page loaded');
+            
+            if (!window.Clerk) {
+                console.error('Clerk failed to load');
+                alert('Authentication system failed to load. Please refresh the page.');
+                return;
+            }
+            
+            await window.Clerk.load();
+            console.log('Clerk loaded');
+            
+            if (!window.Clerk.user) {
+                console.log('No user found, redirecting to login');
+                window.location.href = 'login.html';
+                return;
+            }
+
+            console.log('User authenticated:', window.Clerk.user.id);
+
+            // Role selection handlers
+           window.selectRole = function(role) {
+                console.log('Role selected:', role);
+                
+                // Store role preference in localStorage
+                localStorage.setItem('userRole', role);
+                console.log('Role saved to localStorage:', role);
+                
+                if (role === 'owner') {
+                    console.log('Redirecting to index.html');
+                    window.location.href = 'index.html';
+                } else if (role === 'reviewer') {
+                    console.log('Redirecting to create-reviewer.html');
+                    window.location.href = 'create-reviewer.html';
+                }
+            };
+            
+            console.log('Role selection ready');
+        });
+    </script>
+</body>
+</html>

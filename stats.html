@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Stats - HelpMarq</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <h1>Platform Statistics</h1>
+                    <p class="tagline">Real-time insights into HelpMarq's ecosystem</p>
+                </div>
+                <div>
+                    <a href="index.html" class="btn-secondary btn-small">← Back to Dashboard</a>
+                    <div id="user-button-container" style="display: inline-block; margin-left: 1rem;"></div>
+                </div>
+            </div>
+        </header>
+
+        <section class="section">
+            <h2>Overview</h2>
+            <div id="overviewStats" class="stats-grid-large">
+                <div class="loading">Loading stats</div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Quality Metrics</h2>
+            <div id="qualityStats" class="stats-grid-medium">
+                <div class="loading">Loading quality metrics</div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Recent Activity (Last 7 Days)</h2>
+            <div id="activityStats" class="stats-grid-medium">
+                <div class="loading">Loading activity</div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Project Distribution</h2>
+            <div id="distributionChart" class="chart-container">
+                <div class="loading">Loading distribution</div>
+            </div>
+        </section>
+    </div>
+
+    <script 
+        async 
+        crossorigin="anonymous" 
+        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
+        onload="window.Clerk.load()"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
+    ></script>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        
+        window.addEventListener('load', async () => {
+            if (!window.Clerk) {
+                console.error('Clerk failed to load');
+                return;
+            }
+            
+            await window.Clerk.load();
+            
+            if (!window.Clerk.user) {
+                window.location.href = '/login.html';
+                return;
+            }
+
+            window.Clerk.mountUserButton(document.getElementById('user-button-container'), {
+                afterSignOutUrl: '/login.html'
+            });
+
+            await loadStats();
+        });
+
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_URL}/stats`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                const stats = result.data;
+
+                displayOverview(stats.totals);
+                displayQuality(stats.quality);
+                displayActivity(stats.activity);
+                displayDistribution(stats.distribution);
+
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        function displayOverview(totals) {
+            const container = document.getElementById('overviewStats');
+            
+            container.innerHTML = `
+                <div class="stat-card-large">
+                    <div class="stat-icon">📊</div>
+                    <div class="stat-value">${totals.projects}</div>
+                    <div class="stat-label">Total Projects</div>
+                    <div class="stat-sublabel">${totals.activeProjects} active</div>
+                </div>
+                
+                <div class="stat-card-large">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-value">${totals.reviewers}</div>
+                    <div class="stat-label">Total Reviewers</div>
+                </div>
+                
+                <div class="stat-card-large">
+                    <div class="stat-icon">📋</div>
+                    <div class="stat-value">${totals.applications}</div>
+                    <div class="stat-label">Total Applications</div>
+                    <div class="stat-sublabel">${totals.approvedApplications} approved</div>
+                </div>
+                
+                <div class="stat-card-large">
+                    <div class="stat-icon">💬</div>
+                    <div class="stat-value">${totals.feedback}</div>
+                    <div class="stat-label">Total Reviews</div>
+                </div>
+            `;
+        }
+
+        function displayQuality(quality) {
+            const container = document.getElementById('qualityStats');
+            
+            container.innerHTML = `
+                <div class="stat-card-medium">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-value">${quality.avgPlatformRating}</div>
+                    <div class="stat-label">Average Platform Rating</div>
+                </div>
+                
+                <div class="stat-card-medium">
+                    <div class="stat-icon">🏆</div>
+                    <div class="stat-value">${quality.totalXPAwarded.toLocaleString()}</div>
+                    <div class="stat-label">Total XP Awarded</div>
+                </div>
+                
+                ${quality.topReviewer ? `
+                <div class="stat-card-medium">
+                    <div class="stat-icon">👑</div>
+                    <div class="stat-value">${quality.topReviewer.username}</div>
+                    <div class="stat-label">Top Reviewer</div>
+                    <div class="stat-sublabel">Level ${quality.topReviewer.level} • ${quality.topReviewer.xp} XP</div>
+                </div>
+                ` : ''}
+            `;
+        }
+
+        function displayActivity(activity) {
+            const container = document.getElementById('activityStats');
+            
+            container.innerHTML = `
+                <div class="stat-card-medium activity">
+                    <div class="stat-icon">🆕</div>
+                    <div class="stat-value">${activity.last7Days.projects}</div>
+                    <div class="stat-label">New Projects</div>
+                    <div class="stat-sublabel">Last 7 days</div>
+                </div>
+                
+                <div class="stat-card-medium activity">
+                    <div class="stat-icon">📝</div>
+                    <div class="stat-value">${activity.last7Days.applications}</div>
+                    <div class="stat-label">New Applications</div>
+                    <div class="stat-sublabel">Last 7 days</div>
+                </div>
+                
+                <div class="stat-card-medium activity">
+                    <div class="stat-icon">💭</div>
+                    <div class="stat-value">${activity.last7Days.feedback}</div>
+                    <div class="stat-label">New Reviews</div>
+                    <div class="stat-sublabel">Last 7 days</div>
+                </div>
+            `;
+        }
+
+        function displayDistribution(distribution) {
+            const container = document.getElementById('distributionChart');
+            
+            if (distribution.projectTypes.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">No data yet</div></div>';
+                return;
+            }
+            
+            let html = '<div class="distribution-bars">';
+            
+            const total = distribution.projectTypes.reduce((sum, type) => sum + type.count, 0);
+            
+            distribution.projectTypes.forEach(type => {
+                const percentage = ((type.count / total) * 100).toFixed(1);
+                
+                html += `
+                    <div class="distribution-item">
+                        <div class="distribution-label">
+                            <span class="project-badge badge-${type._id}">${type._id}</span>
+                            <span>${type.count} projects (${percentage}%)</span>
+                        </div>
+                        <div class="distribution-bar">
+                            <div class="distribution-fill" style="width: ${percentage}%"></div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            container.innerHTML = html;
+        }
+    </script>
+</body>
+</html>

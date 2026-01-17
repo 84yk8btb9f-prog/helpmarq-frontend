@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Owner Profile - HelpMarq</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="header-content">
+                <div>
+                    <h1>HelpMarq</h1>
+                    <p class="tagline">Expert insights. Accessible pricing.</p>
+                </div>
+                <div>
+                    <a href="index.html" class="btn-secondary btn-small">← Back to Dashboard</a>
+                    <div id="user-button-container" style="display: inline-block; margin-left: 1rem;"></div>
+                </div>
+            </div>
+        </header>
+
+        <section class="section">
+            <div id="profileContent" class="loading">Loading profile</div>
+        </section>
+
+        <section class="section">
+            <h2>Project History</h2>
+            <div id="projectHistory" class="loading">Loading projects</div>
+        </section>
+
+        <section class="section">
+            <h2>Top Reviewers</h2>
+            <p style="color: var(--neutral-mid); margin-bottom: 1rem;">Reviewers who have provided feedback on your projects</p>
+            <div id="topReviewers" class="loading">Loading reviewers</div>
+        </section>
+    </div>
+
+    <script 
+        async 
+        crossorigin="anonymous" 
+        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
+        onload="window.Clerk.load()"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
+    ></script>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        
+        window.addEventListener('load', async () => {
+            if (!window.Clerk) {
+                console.error('Clerk failed to load');
+                return;
+            }
+            
+            await window.Clerk.load();
+            
+            if (!window.Clerk.user) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            window.Clerk.mountUserButton(document.getElementById('user-button-container'), {
+                afterSignOutUrl: 'login.html'
+            });
+
+            // Get owner ID from URL or use current user
+            const urlParams = new URLSearchParams(window.location.search);
+            const ownerId = urlParams.get('id') || window.Clerk.user.id;
+
+            await loadOwnerProfile(ownerId);
+            await loadProjectHistory(ownerId);
+            await loadTopReviewers(ownerId);
+        });
+
+        async function loadOwnerProfile(ownerId) {
+            try {
+                const token = await window.Clerk.session.getToken();
+                
+                // Get owner's projects to calculate stats
+                const response = await fetch(`${API_URL}/projects`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                const ownerProjects = result.data.filter(p => p.ownerId === ownerId);
+                
+                const totalProjects = ownerProjects.length;
+                const totalApplicants = ownerProjects.reduce((sum, p) => sum + p.applicantsCount, 0);
+                const totalReviews = ownerProjects.reduce((sum, p) => sum + p.reviewsCount, 0);
+                const activeProjects = ownerProjects.filter(p => p.status === 'open').length;
+
+                const profileContent = document.getElementById('profileContent');
+
+                // Get owner name from first project or use email
+                const ownerName = ownerProjects.length > 0 ? ownerProjects[0].ownerName : window.Clerk.user.primaryEmailAddress.emailAddress;
+
+                profileContent.innerHTML = `
+                    <div class="owner-profile">
+                        <div class="profile-header">
+                            <div>
+                                <h2>${escapeHtml(ownerName)}</h2>
+                                <p style="color: var(--neutral-mid); margin-top: 0.5rem;">Project Owner</p>
+                            </div>
+                            <div class="owner-badge">
+                                <div style="font-size: 48px; font-weight: 700; color: var(--primary-blue);">
+                                    ${totalProjects}
+                                </div>
+                                <div style="color: var(--neutral-mid); font-size: 14px;">Projects</div>
+                            </div>
+                        </div>
+
+                        <div class="profile-stats">
+                            <div class="stat-box">
+                                <div class="stat-value">${totalProjects}</div>
+                                <div class="stat-label">Total Projects</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-value">${activeProjects}</div>
+                                <div class="stat-label">Active Projects</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-value">${totalApplicants}</div>
+                                <div class="stat-label">Total Applicants</div>
+                            </div>
+                            <div class="stat-box">
+                                <div class="stat-value">${totalReviews}</div>
+                                <div class="stat-label">Reviews Received</div>
+                            </div>
+                        </div>
+
+                        <div class="profile-joined">
+                            <p>Member since ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                document.getElementById('profileContent').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading profile</div></div>';
+            }
+        }
+
+        async function loadProjectHistory(ownerId) {
+            try {
+                const token = await window.Clerk.session.getToken();
+                
+                const response = await fetch(`${API_URL}/projects`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error);
+                }
+
+                const projects = result.data.filter(p => p.ownerId === ownerId);
+                const historyContainer = document.getElementById('projectHistory');
+
+                if (projects.length === 0) {
+                    historyContainer.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No projects yet</div></div>';
+                    return;
+                }
+
+                historyContainer.innerHTML = '';
+
+                const projectsGrid = document.createElement('div');
+                projectsGrid.className = 'projects-grid';
+
+                projects.forEach(project => {
+                    const card = document.createElement('div');
+                    card.className = 'project-card';
+
+                    const date = new Date(project.createdAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                    });
+
+                    card.innerHTML = `
+                        <h3>${escapeHtml(project.title)}</h3>
+                        <span class="project-badge badge-${project.type}">${project.type}</span>
+                        <p class="project-desc">${escapeHtml(project.description)}</p>
+                        
+                        <div class="project-meta">
+                            <span style="color: var(--neutral-mid);">📅 ${date}</span>
+                            <span style="color: var(--success-green);">+${project.xpReward} XP</span>
+                        </div>
+                        
+                        <div style="display: flex; gap: 1rem; margin-top: 1rem; font-size: 14px; color: var(--neutral-mid);">
+                            <span>📋 ${project.applicantsCount} applicants</span>
+                            <span>✅ ${project.approvedCount} approved</span>
+                            <span>💬 ${project.reviewsCount} reviews</span>
+                        </div>
+                    `;
+
+                    projectsGrid.appendChild(card);
+                });
+
+                historyContainer.appendChild(projectsGrid);
+            } catch (error) {
+                console.error('Error loading project history:', error);
+                document.getElementById('projectHistory').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading projects</div></div>';
+            }
+        }
+
+        async function loadTopReviewers(ownerId) {
+            try {
+                const token = await window.Clerk.session.getToken();
+                
+                // Get owner's projects
+                const projectsResponse = await fetch(`${API_URL}/projects`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const projectsResult = await projectsResponse.json();
+                const ownerProjects = projectsResult.data.filter(p => p.ownerId === ownerId);
+                const projectIds = ownerProjects.map(p => p._id);
+                
+                if (projectIds.length === 0) {
+                    document.getElementById('topReviewers').innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">No reviewers yet</div></div>';
+                    return;
+                }
+                
+                // Get all feedback for owner's projects
+                const reviewerCounts = {};
+                
+                for (const projectId of projectIds) {
+                    const feedbackResponse = await fetch(`${API_URL}/feedback/project/${projectId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        }
+                    });
+                    
+                    const feedbackResult = await feedbackResponse.json();
+                    
+                    if (feedbackResult.success) {
+                        feedbackResult.data.forEach(feedback => {
+                            const username = feedback.reviewerUsername;
+                            if (!reviewerCounts[username]) {
+                                reviewerCounts[username] = {
+                                    count: 0,
+                                    totalRating: 0,
+                                    ratedCount: 0
+                                };
+                            }
+                            reviewerCounts[username].count++;
+                            if (feedback.isRated) {
+                                reviewerCounts[username].totalRating += feedback.ownerRating;
+                                reviewerCounts[username].ratedCount++;
+                            }
+                        });
+                    }
+                }
+                
+                // Sort by count
+                const topReviewers = Object.entries(reviewerCounts)
+                    .map(([username, data]) => ({
+                        username,
+                        reviews: data.count,
+                        avgRating: data.ratedCount > 0 ? (data.totalRating / data.ratedCount).toFixed(1) : 'N/A'
+                    }))
+                    .sort((a, b) => b.reviews - a.reviews)
+                    .slice(0, 5);
+                
+                const container = document.getElementById('topReviewers');
+                
+                if (topReviewers.length === 0) {
+                    container.innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">No reviewers yet</div></div>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                
+                topReviewers.forEach((reviewer, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'reviewer-card';
+                    
+                    card.innerHTML = `
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div style="font-size: 24px; font-weight: 700; color: white; min-width: 30px;">
+                                #${index + 1}
+                            </div>
+                            <div class="reviewer-info">
+                                <h3 style="color: white;">${escapeHtml(reviewer.username)}</h3>
+                                <p style="color: rgba(255,255,255,0.9); font-size: 14px;">${reviewer.reviews} reviews • ${reviewer.avgRating} avg rating</p>
+                            </div>
+                        </div>
+                    `;
+                    
+                    container.appendChild(card);
+                });
+                
+            } catch (error) {
+                console.error('Error loading top reviewers:', error);
+                document.getElementById('topReviewers').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading reviewers</div></div>';
+            }
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelpMarq - Login</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>HelpMarq</h1>
+                <p class="tagline">Expert insights. Accessible pricing.</p>
+            </div>
+            
+            <div id="clerk-signin"></div>
+            
+            <div class="auth-footer">
+                <p>Don't have an account? <a href="signup.html">Sign up</a></p>
+            </div>
+        </div>
+    </div>
+
+  <script 
+        async 
+        crossorigin="anonymous" 
+        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
+        onload="window.Clerk.load()"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
+    ></script>
+
+    <script>
+        window.addEventListener('load', async () => {
+            if (!window.Clerk) {
+                console.error('Clerk failed to load');
+                return;
+            }
+            
+            await window.Clerk.load();
+            
+            if (window.Clerk.user) {
+                window.location.href = 'role-select.html';
+                return;
+            }
+            
+            const baseUrl = window.location.origin;
+            const signInDiv = document.getElementById('clerk-signin');
+            
+            window.Clerk.mountSignIn(signInDiv, {
+    afterSignInUrl: `${baseUrl}/index.html`,
+    redirectUrl: `${baseUrl}/index.html`,
+                appearance: {
+                    elements: {
+                        footerActionLink: { display: 'none' }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>

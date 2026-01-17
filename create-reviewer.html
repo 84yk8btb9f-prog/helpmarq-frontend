@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HelpMarq - Create Reviewer Profile</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="auth-header">
+                <h1>Create Reviewer Profile</h1>
+                <p class="tagline">Set up your profile to start reviewing</p>
+            </div>
+            
+            <form id="reviewerProfileForm" class="form">
+                <div class="form-group">
+                    <label for="username">Display Name *</label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        placeholder="e.g., Sarah Martinez"
+                        required
+                        minlength="3"
+                        maxlength="50"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="expertise">Primary Expertise *</label>
+                    <select id="expertise" required>
+                        <option value="">Select your expertise...</option>
+                        <option value="UI/UX Design">UI/UX Design</option>
+                        <option value="Web Development">Web Development</option>
+                        <option value="Mobile Development">Mobile Development</option>
+                        <option value="Graphic Design">Graphic Design</option>
+                        <option value="Product Management">Product Management</option>
+                        <option value="Marketing">Marketing</option>
+                        <option value="Copywriting">Copywriting</option>
+                        <option value="Business Strategy">Business Strategy</option>
+                        <option value="Data Analysis">Data Analysis</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="experience">Years of Experience *</label>
+                    <select id="experience" required>
+                        <option value="">Select experience...</option>
+                        <option value="0-1">Less than 1 year</option>
+                        <option value="1-3">1-3 years</option>
+                        <option value="3-5">3-5 years</option>
+                        <option value="5-10">5-10 years</option>
+                        <option value="10+">10+ years</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="portfolio">Portfolio / LinkedIn URL (Optional)</label>
+                    <input 
+                        type="url" 
+                        id="portfolio" 
+                        placeholder="https://..."
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="bio">About You *</label>
+                    <textarea 
+                        id="bio" 
+                        rows="4" 
+                        placeholder="Tell us about your background (minimum 50 characters)..."
+                        required
+                        minlength="50"
+                        maxlength="500"
+                    ></textarea>
+                    <small id="bioCounter">0 / 50 characters</small>
+                </div>
+
+                <button type="submit" class="btn-primary" id="submitBtn">Create Reviewer Profile</button>
+            </form>
+
+            <div id="message" class="message"></div>
+        </div>
+    </div>
+
+    <script 
+        async 
+        crossorigin="anonymous" 
+        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
+        onload="window.Clerk.load()"
+        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
+    ></script>
+
+    <script>
+const API_URL = window.location.hostname === 'localhost' 
+    ? 'http://localhost:3000/api'
+    : 'https://your-backend-url.railway.app/api';
+    
+        window.addEventListener('load', async () => {
+            console.log('=== REVIEWER CREATION PAGE LOADED ===');
+            
+            if (!window.Clerk) {
+                alert('Authentication failed to load. Please refresh.');
+                return;
+            }
+            
+            await window.Clerk.load();
+            
+            if (!window.Clerk.user) {
+                window.location.href = 'login.html';
+                return;
+            }
+
+            console.log('✓ User authenticated:', window.Clerk.user.id);
+
+            // Bio counter
+            const bioField = document.getElementById('bio');
+            const bioCounter = document.getElementById('bioCounter');
+            
+            bioField.addEventListener('input', () => {
+                const length = bioField.value.length;
+                bioCounter.textContent = `${length} / 50 characters`;
+                bioCounter.style.color = length >= 50 ? 'green' : 'red';
+            });
+
+            // Form submission
+            const form = document.getElementById('reviewerProfileForm');
+            
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                console.log('=== FORM SUBMISSION STARTED ===');
+                
+                const submitBtn = document.getElementById('submitBtn');
+                const message = document.getElementById('message');
+                
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Creating Profile...';
+                message.style.display = 'none';
+                
+                try {
+                    // Get ALL form values
+                    const usernameEl = document.getElementById('username');
+                    const expertiseEl = document.getElementById('expertise');
+                    const experienceEl = document.getElementById('experience');
+                    const portfolioEl = document.getElementById('portfolio');
+                    const bioEl = document.getElementById('bio');
+                    
+                    const username = usernameEl.value.trim();
+                    const expertise = expertiseEl.value;
+                    const experience = experienceEl.value;
+                    const portfolio = portfolioEl.value.trim();
+                    const bio = bioEl.value.trim();
+                    
+                    console.log('=== FORM VALUES ===');
+                    console.log('Username:', username, '(length:', username.length, ')');
+                    console.log('Expertise:', expertise, '(selected:', expertise !== '', ')');
+                    console.log('Experience:', experience, '(selected:', experience !== '', ')');
+                    console.log('Portfolio:', portfolio);
+                    console.log('Bio:', bio, '(length:', bio.length, ')');
+                    
+                    // Frontend validation
+                    const errors = [];
+                    
+                    if (!username || username.length < 3) {
+                        errors.push('Display name must be at least 3 characters');
+                    }
+                    
+                    if (!expertise || expertise === '') {
+                        errors.push('Please select your expertise');
+                    }
+                    
+                    if (!experience || experience === '') {
+                        errors.push('Please select your experience level');
+                    }
+                    
+                    if (!bio || bio.length < 50) {
+                        errors.push('Bio must be at least 50 characters');
+                    }
+                    
+                    if (errors.length > 0) {
+                        console.error('=== VALIDATION ERRORS ===');
+                        errors.forEach(err => console.error('- ' + err));
+                        throw new Error(errors.join('. '));
+                    }
+                    
+                    console.log('✓ Frontend validation passed');
+                    
+                    // Get auth token
+                    console.log('Getting auth token...');
+                    const token = await window.Clerk.session.getToken();
+                    
+                    if (!token) {
+                        throw new Error('Failed to get authentication token');
+                    }
+                    
+                    console.log('✓ Token received');
+                    
+                    // Prepare data payload
+                    const formData = {
+                        username: username,
+                        email: window.Clerk.user.primaryEmailAddress.emailAddress,
+                        expertise: expertise,
+                        experience: experience,
+                        portfolio: portfolio || '',
+                        bio: bio
+                    };
+                    
+                    console.log('=== SENDING TO SERVER ===');
+                    console.log('Endpoint:', `${API_URL}/auth/create-reviewer`);
+                    console.log('Payload:', JSON.stringify(formData, null, 2));
+                    
+                    // Make API request
+                    const response = await fetch(`${API_URL}/auth/create-reviewer`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(formData)
+                    });
+                    
+                    console.log('Response status:', response.status);
+                    
+                    const result = await response.json();
+                    console.log('Response data:', result);
+                    
+                    if (!response.ok || !result.success) {
+                        throw new Error(result.error || `Server error: ${response.status}`);
+                    }
+                    
+                    // Success!
+                    console.log('=== SUCCESS ===');
+                    message.textContent = '✅ Profile created! Redirecting...';
+                    message.className = 'message success';
+                    message.style.display = 'block';
+                    
+                    localStorage.setItem('userRole', 'reviewer');
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('=== ERROR ===');
+                    console.error(error);
+                    
+                    message.textContent = '❌ ' + error.message;
+                    message.className = 'message error';
+                    message.style.display = 'block';
+                    
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Create Reviewer Profile';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
