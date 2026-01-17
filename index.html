@@ -496,26 +496,19 @@
             }
             // Manual sign out function
             window.manualSignOut = async function() {
-                console.log('Manual sign out triggered');
-                try {
-                    // Clear all local data
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    
-                    // Sign out from Clerk
-                    await window.Clerk.signOut();
-                    
-                    // Force redirect after short delay
-                    setTimeout(() => {
-                        window.location.href = 'login.html';
-                    }, 500);
-                } catch (error) {
-                    console.error('Sign out error:', error);
-                    // Force redirect anyway
-                    localStorage.clear();
-                    window.location.href = 'login.html';
-                }
-            };
+    console.log('Manual sign out triggered');
+    try {
+        localStorage.clear();
+        sessionStorage.clear();
+        await window.Clerk.signOut();
+        // Redirect to Clerk's sign-in page
+        window.Clerk.redirectToSignIn();
+    } catch (error) {
+        console.error('Sign out error:', error);
+        localStorage.clear();
+        window.Clerk.redirectToSignIn();
+    }
+};
 
             console.log('Loading app.js...');
             const script = document.createElement('script');

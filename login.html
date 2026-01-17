@@ -30,33 +30,26 @@
         src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
     ></script>
 
-    <script>
-        window.addEventListener('load', async () => {
-            if (!window.Clerk) {
-                console.error('Clerk failed to load');
-                return;
-            }
-            
-            await window.Clerk.load();
-            
-            if (window.Clerk.user) {
-                window.location.href = 'role-select.html';
-                return;
-            }
-            
-            const baseUrl = window.location.origin;
-            const signInDiv = document.getElementById('clerk-signin');
-            
-            window.Clerk.mountSignIn(signInDiv, {
-    afterSignInUrl: `${baseUrl}/index.html`,
-    redirectUrl: `${baseUrl}/index.html`,
-                appearance: {
-                    elements: {
-                        footerActionLink: { display: 'none' }
-                    }
-                }
-            });
+   <script>
+    window.addEventListener('load', async () => {
+        if (!window.Clerk) {
+            console.error('Clerk failed to load');
+            return;
+        }
+        
+        await window.Clerk.load();
+        
+        if (window.Clerk.user) {
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        // Redirect to Clerk's hosted sign-in page
+        window.Clerk.redirectToSignIn({
+            afterSignInUrl: window.location.origin + '/index.html',
+            afterSignUpUrl: window.location.origin + '/role-select.html'
         });
-    </script>
+    });
+</script>
 </body>
 </html>
