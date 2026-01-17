@@ -2202,4 +2202,30 @@ body:has(.cl-userButtonPopoverCard) {
 .cl-userButton {
     transform: none !important;
 }
+/* === CLERK MODAL FIX - PREVENT SHRINKING === */
+.cl-modalContent,
+.cl-card,
+.cl-rootBox,
+.cl-internal- {
+    min-width: 400px !important;
+    max-width: 500px !important;
+    width: 100% !important;
+    margin: 0 auto !important;
+}
+
+.cl-userButtonPopoverCard {
+    position: fixed !important;
+    width: 320px !important;
+    min-width: 320px !important;
+}
+
+/* Prevent layout shift */
+body:has(.cl-modalBackdrop) {
+    overflow: hidden;
+}
+
+.cl-modalBackdrop {
+    position: fixed !important;
+    inset: 0 !important;
+}
 /* === END OF BRAND-ALIGNED STYLES === */
