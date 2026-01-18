@@ -2228,4 +2228,26 @@ body:has(.cl-modalBackdrop) {
     position: fixed !important;
     inset: 0 !important;
 }
+/* === FINAL CLERK MODAL FIX === */
+.cl-card,
+.cl-modalContent,
+.cl-internal-b3fm6zn {
+    min-width: 400px !important;
+    max-width: 480px !important;
+    margin: 0 auto !important;
+}
+
+.cl-userButtonPopoverCard {
+    min-width: 280px !important;
+    max-width: 320px !important;
+}
+
+/* Prevent body shift */
+.cl-modalBackdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+}
 /* === END OF BRAND-ALIGNED STYLES === */

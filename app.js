@@ -139,7 +139,7 @@ let currentReviewerId = null;
 
 const API_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:3000/api'
-    : 'https://helpmarq-backend.onrender.com';
+    : 'https://helpmarq-backend.onrender.com/api';
 // State
 let currentProjectForApplication = null;
 // Notifications
@@ -1021,17 +1021,68 @@ async function displayProjectsForApplication(projects) {
     }
 }
 
-function openApplicationModal(projectId, title, type, xpReward) {
+async function openApplicationModal(projectId, title, type, xpReward) {
     currentProjectForApplication = projectId;
     
-    const modalProjectInfo = document.getElementById('modalProjectInfo');
-    modalProjectInfo.innerHTML = `
-        <h3>${title}</h3>
-        <p>
-            <span class="project-badge badge-${type}">${type}</span>
-            <span style="color: #10B981; font-weight: 600; margin-left: 0.5rem;">+${xpReward} XP</span>
-        </p>
-    `;
+    try {
+        // Fetch full project details to get deadline
+        const result = await safeFetch(`${API_URL}/projects/${projectId}`);
+        
+        if (result.success) {
+            const project = result.data;
+            const deadline = new Date(project.deadline);
+            const now = new Date();
+            const hoursLeft = Math.floor((deadline - now) / (1000 * 60 * 60));
+            const daysLeft = Math.floor(hoursLeft / 24);
+            
+            let deadlineText = '';
+            let deadlineColor = '';
+            
+            if (hoursLeft < 0) {
+                deadlineText = 'Deadline passed';
+                deadlineColor = '#EF4444';
+            } else if (hoursLeft < 24) {
+                deadlineText = `${hoursLeft} hours left`;
+                deadlineColor = '#EF4444';
+            } else if (daysLeft < 3) {
+                deadlineText = `${daysLeft} days left`;
+                deadlineColor = '#F59E0B';
+            } else {
+                deadlineText = `${daysLeft} days left`;
+                deadlineColor = '#10B981';
+            }
+            
+            const modalProjectInfo = document.getElementById('modalProjectInfo');
+            modalProjectInfo.innerHTML = `
+                <h3>${title}</h3>
+                <p>
+                    <span class="project-badge badge-${type}">${type}</span>
+                    <span style="color: #10B981; font-weight: 600; margin-left: 0.5rem;">+${xpReward} XP</span>
+                    <span class="project-badge" style="background: ${deadlineColor}; color: white; margin-left: 0.5rem;">⏰ ${deadlineText}</span>
+                </p>
+                <p style="color: #6B7280; font-size: 14px; margin-top: 8px;">
+                    <strong>Deadline:</strong> ${deadline.toLocaleString('en-US', { 
+                        month: 'short', 
+                        day: 'numeric', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    })}
+                </p>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading project details:', error);
+        // Fallback to basic info
+        const modalProjectInfo = document.getElementById('modalProjectInfo');
+        modalProjectInfo.innerHTML = `
+            <h3>${title}</h3>
+            <p>
+                <span class="project-badge badge-${type}">${type}</span>
+                <span style="color: #10B981; font-weight: 600; margin-left: 0.5rem;">+${xpReward} XP</span>
+            </p>
+        `;
+    }
     
     applicationModal.classList.add('active');
 }
