@@ -85,35 +85,24 @@
         </div>
     </div>
 
-    <script 
-        async 
-        crossorigin="anonymous" 
-        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
-        onload="window.Clerk.load()"
-        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
-    ></script>
+    <script type="module">
+        import { authClient, getCurrentUser } from './lib/auth.js';
 
-    <script>
-const API_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:3000/api'
-    : 'https://helpmarq-backend.onrender.com/api';
-    
+        const API_URL = window.location.hostname === 'localhost' 
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
+        
         window.addEventListener('load', async () => {
             console.log('=== REVIEWER CREATION PAGE LOADED ===');
             
-            if (!window.Clerk) {
-                alert('Authentication failed to load. Please refresh.');
-                return;
-            }
-            
-            await window.Clerk.load();
-            
-            if (!window.Clerk.user) {
+            // Check authentication
+            const user = await getCurrentUser();
+            if (!user) {
                 window.location.href = 'login.html';
                 return;
             }
 
-            console.log('✓ User authenticated:', window.Clerk.user.id);
+            console.log('✓ User authenticated:', user.id);
 
             // Bio counter
             const bioField = document.getElementById('bio');
@@ -140,91 +129,58 @@ const API_URL = window.location.hostname === 'localhost'
                 message.style.display = 'none';
                 
                 try {
-                    // Get ALL form values
-                    const usernameEl = document.getElementById('username');
-                    const expertiseEl = document.getElementById('expertise');
-                    const experienceEl = document.getElementById('experience');
-                    const portfolioEl = document.getElementById('portfolio');
-                    const bioEl = document.getElementById('bio');
-                    
-                    const username = usernameEl.value.trim();
-                    const expertise = expertiseEl.value;
-                    const experience = experienceEl.value;
-                    const portfolio = portfolioEl.value.trim();
-                    const bio = bioEl.value.trim();
-                    
-                    console.log('=== FORM VALUES ===');
-                    console.log('Username:', username, '(length:', username.length, ')');
-                    console.log('Expertise:', expertise, '(selected:', expertise !== '', ')');
-                    console.log('Experience:', experience, '(selected:', experience !== '', ')');
-                    console.log('Portfolio:', portfolio);
-                    console.log('Bio:', bio, '(length:', bio.length, ')');
+                    const username = document.getElementById('username').value.trim();
+                    const expertise = document.getElementById('expertise').value;
+                    const experience = document.getElementById('experience').value;
+                    const portfolio = document.getElementById('portfolio').value.trim();
+                    const bio = document.getElementById('bio').value.trim();
                     
                     // Frontend validation
-                    const errors = [];
-                    
                     if (!username || username.length < 3) {
-                        errors.push('Display name must be at least 3 characters');
+                        throw new Error('Display name must be at least 3 characters');
                     }
                     
-                    if (!expertise || expertise === '') {
-                        errors.push('Please select your expertise');
+                    if (!expertise) {
+                        throw new Error('Please select your expertise');
                     }
                     
-                    if (!experience || experience === '') {
-                        errors.push('Please select your experience level');
+                    if (!experience) {
+                        throw new Error('Please select your experience level');
                     }
                     
                     if (!bio || bio.length < 50) {
-                        errors.push('Bio must be at least 50 characters');
-                    }
-                    
-                    if (errors.length > 0) {
-                        console.error('=== VALIDATION ERRORS ===');
-                        errors.forEach(err => console.error('- ' + err));
-                        throw new Error(errors.join('. '));
+                        throw new Error('Bio must be at least 50 characters');
                     }
                     
                     console.log('✓ Frontend validation passed');
                     
-                    // Get auth token
-                    console.log('Getting auth token...');
-                    const token = await window.Clerk.session.getToken();
-                    
-                    if (!token) {
-                        throw new Error('Failed to get authentication token');
+                    // Get session token
+                    const session = await authClient.getSession();
+                    if (!session) {
+                        throw new Error('Session expired. Please log in again.');
                     }
                     
-                    console.log('✓ Token received');
-                    
-                    // Prepare data payload
                     const formData = {
-                        username: username,
-                        email: window.Clerk.user.primaryEmailAddress.emailAddress,
-                        expertise: expertise,
-                        experience: experience,
+                        username,
+                        email: user.email,
+                        expertise,
+                        experience,
                         portfolio: portfolio || '',
-                        bio: bio
+                        bio
                     };
                     
-                    console.log('=== SENDING TO SERVER ===');
-                    console.log('Endpoint:', `${API_URL}/auth/create-reviewer`);
-                    console.log('Payload:', JSON.stringify(formData, null, 2));
+                    console.log('Sending to server:', formData);
                     
-                    // Make API request
                     const response = await fetch(`${API_URL}/auth/create-reviewer`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
+                            'Authorization': `Bearer ${session.session.token}`
                         },
                         body: JSON.stringify(formData)
                     });
                     
-                    console.log('Response status:', response.status);
-                    
                     const result = await response.json();
-                    console.log('Response data:', result);
                     
                     if (!response.ok || !result.success) {
                         throw new Error(result.error || `Server error: ${response.status}`);
@@ -237,14 +193,14 @@ const API_URL = window.location.hostname === 'localhost'
                     message.style.display = 'block';
                     
                     localStorage.setItem('userRole', 'reviewer');
+                    sessionStorage.setItem('roleJustSelected', 'true');
                     
                     setTimeout(() => {
                         window.location.href = 'index.html';
                     }, 1500);
                     
                 } catch (error) {
-                    console.error('=== ERROR ===');
-                    console.error(error);
+                    console.error('=== ERROR ===', error);
                     
                     message.textContent = '❌ ' + error.message;
                     message.className = 'message error';

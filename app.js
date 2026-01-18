@@ -78,9 +78,18 @@ window.closeErrorNotification = function() {
     if (notification) notification.remove();
 };
 
-// Better fetch wrapper with error handling
-async function safeFetch(url, options = {}, retryCallback = null) {
+// Enhanced safeFetch with caching
+async function safeFetch(url, options = {}, retryCallback = null, useCache = false) {
     try {
+        // Check cache for GET requests
+        if (useCache && (!options.method || options.method === 'GET')) {
+            const cached = getCached(url);
+            if (cached) {
+                console.log('Cache hit:', url);
+                return cached;
+            }
+        }
+
         const response = await fetch(url, options);
         
         if (!response.ok) {
@@ -98,7 +107,14 @@ async function safeFetch(url, options = {}, retryCallback = null) {
             }
         }
         
-        return await response.json();
+        const data = await response.json();
+
+        // Cache GET requests
+        if (useCache && (!options.method || options.method === 'GET')) {
+            setCache(url, data);
+        }
+        
+        return data;
         
     } catch (error) {
         console.error('Fetch error:', error);
@@ -124,24 +140,32 @@ async function safeFetch(url, options = {}, retryCallback = null) {
     }
 }
 
-// Escape HTML helper (if not already defined)
+// Escape HTML helper
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
+
 // === AUTHENTICATION SETUP ===
-let clerk = null;
+import { authClient, getCurrentUser, isAuthenticated } from './lib/auth.js';
+import { getCached, setCache, initCacheClear } from './lib/cache.js';
+
+// Initialize cache clearing
+initCacheClear();
+
 let currentUser = null;
 let userRole = null;
 let currentReviewerId = null;
 
-const API_URL = window.location.hostname === 'localhost' 
+const API_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:3000/api'
     : 'https://helpmarq-backend.onrender.com/api';
+
 // State
 let currentProjectForApplication = null;
+
 // Notifications
 let notifications = {
     owner: { newApplicants: 0, newFeedback: 0, unratedFeedback: 0 },
@@ -150,12 +174,10 @@ let notifications = {
 
 async function loadNotifications() {
     try {
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
         const result = await safeFetch(`${API_URL}/notifications`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => loadNotifications());
         
         if (result.success) {
@@ -212,39 +234,57 @@ function createBadge(count, type = 'default') {
     badge.textContent = count > 99 ? '99+' : count;
     return badge;
 }
+
 // === DASHBOARD FUNCTIONS ===
 
 async function loadOwnerDashboard() {
     try {
-        const token = await getAuthToken();
-        
+        const headers = await getAuthHeaders();
+
         const result = await safeFetch(`${API_URL}/projects`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => loadOwnerDashboard());
-        
+
         if (result.success) {
             const userProjects = result.data.filter(p => p.ownerId === currentUser.id);
-            
+
             // Update stats
             document.getElementById('ownerTotalProjects').textContent = userProjects.length;
-            
+
             const totalApplicants = userProjects.reduce((sum, p) => sum + p.applicantsCount, 0);
             document.getElementById('ownerTotalApplicants').textContent = totalApplicants;
-            
+
             const totalFeedback = userProjects.reduce((sum, p) => sum + p.reviewsCount, 0);
             document.getElementById('ownerTotalFeedback').textContent = totalFeedback;
-            
-            const pendingActions = notifications.owner.newApplicants + notifications.owner.unratedFeedback;
-            document.getElementById('ownerPendingActions').textContent = pendingActions;
-            
+
+            // Count pending actions
+            let pendingApplicants = 0;
+            let unratedFeedback = 0;
+
+            for (const project of userProjects) {
+                // Get pending applicants
+                const appsResult = await safeFetch(`${API_URL}/applications/project/${project._id}`, { headers });
+                if (appsResult.success) {
+                    pendingApplicants += appsResult.data.filter(a => a.status === 'pending').length;
+                }
+
+                // Get unrated feedback
+                const feedbackResult = await safeFetch(`${API_URL}/feedback/project/${project._id}`, { headers });
+                if (feedbackResult.success) {
+                    unratedFeedback += feedbackResult.data.filter(f => !f.isRated).length;
+                }
+            }
+
+            document.getElementById('ownerPendingActions').textContent = pendingApplicants + unratedFeedback;
+
             // Display projects
             displayOwnerProjects(userProjects);
         }
-        
+
     } catch (error) {
         console.error('Error loading owner dashboard:', error);
+        document.getElementById('ownerProjectsList').innerHTML = 
+            '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading dashboard</div></div>';
     }
 }
 
@@ -294,53 +334,51 @@ async function loadReviewerDashboard() {
             console.error('No reviewer ID found');
             return;
         }
-        
-        const token = await getAuthToken();
-        
+
+        const headers = await getAuthHeaders();
+
         // Get reviewer info
         const reviewerResult = await safeFetch(`${API_URL}/reviewers/${currentReviewerId}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => loadReviewerDashboard());
-        
+
         if (reviewerResult.success) {
             const reviewer = reviewerResult.data;
-            
+
             // Update stats
             document.getElementById('reviewerLevel').textContent = reviewer.level;
             document.getElementById('reviewerXP').textContent = reviewer.xp;
             document.getElementById('reviewerTotalReviews').textContent = reviewer.totalReviews;
             document.getElementById('reviewerAvgRating').textContent = reviewer.averageRating.toFixed(1);
-            
+
             // Calculate XP progress
             const levelThresholds = [0, 500, 1000, 1500, 2000, 2500];
             const currentLevelMin = levelThresholds[reviewer.level - 1] || 0;
             const nextLevelMin = levelThresholds[reviewer.level] || 2500;
-            
+
             const progressPercent = ((reviewer.xp - currentLevelMin) / (nextLevelMin - currentLevelMin)) * 100;
-            
+
             const progressFill = document.getElementById('xpProgressFill');
             progressFill.style.width = `${Math.min(progressPercent, 100)}%`;
-            
+
             const xpNeeded = nextLevelMin - reviewer.xp;
-            document.getElementById('xpProgressText').textContent = 
+            document.getElementById('xpProgressText').textContent =
                 xpNeeded > 0 ? `${xpNeeded} XP to Level ${reviewer.level + 1}` : 'Max level reached!';
         }
-        
+
         // Get applications
         const appsResult = await safeFetch(`${API_URL}/applications/reviewer/${currentReviewerId}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => loadReviewerDashboard());
-        
+
         if (appsResult.success) {
             displayReviewerApplications(appsResult.data);
         }
-        
+
     } catch (error) {
         console.error('Error loading reviewer dashboard:', error);
+        document.getElementById('reviewerApplicationsList').innerHTML = 
+            '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading dashboard</div></div>';
     }
 }
 
@@ -384,6 +422,7 @@ function displayReviewerApplications(applications) {
         container.appendChild(card);
     });
 }
+
 // DOM Elements
 const uploadForm = document.getElementById('uploadForm');
 const applicationForm = document.getElementById('applicationForm');
@@ -411,14 +450,14 @@ let currentReviewerForFeedback = null;
 async function initializeAuth() {
     console.log('=== INITIALIZING AUTH ===');
     
-    clerk = window.clerk;
-    if (!clerk || !clerk.user) {
-        console.log('No clerk or user, redirecting to login');
+    // Check if authenticated
+    if (!await isAuthenticated()) {
+        console.log('Not authenticated, redirecting to login');
         window.location.href = 'login.html';
         return false;
     }
     
-    currentUser = clerk.user;
+    currentUser = await getCurrentUser();
     console.log('Current user:', currentUser.id);
     
     // Check if user just selected role (prevent loop)
@@ -474,39 +513,35 @@ async function loadUserRole() {
         }
         
         // STEP 4: Try backend (but don't wait forever)
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
-        if (token) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
-                
-                const result = await fetch(`${API_URL}/auth/me`, {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    },
-                    signal: controller.signal
-                }).then(res => res.json());
-                
-                clearTimeout(timeoutId);
-                
-                console.log('4. Backend response:', result);
-                
-                if (result.success) {
-                    if (result.role === 'reviewer') {
-                        userRole = 'reviewer';
-                        currentReviewerId = result.data._id;
-                        localStorage.setItem('userRole', 'reviewer');
-                        console.log('✓ Backend says REVIEWER');
-                    } else if (result.role === 'owner') {
-                        userRole = 'owner';
-                        localStorage.setItem('userRole', 'owner');
-                        console.log('✓ Backend says OWNER');
-                    }
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+            
+            const result = await fetch(`${API_URL}/auth/me`, {
+                headers,
+                signal: controller.signal
+            }).then(res => res.json());
+            
+            clearTimeout(timeoutId);
+            
+            console.log('4. Backend response:', result);
+            
+            if (result.success) {
+                if (result.role === 'reviewer') {
+                    userRole = 'reviewer';
+                    currentReviewerId = result.data._id;
+                    localStorage.setItem('userRole', 'reviewer');
+                    console.log('✓ Backend says REVIEWER');
+                } else if (result.role === 'owner') {
+                    userRole = 'owner';
+                    localStorage.setItem('userRole', 'owner');
+                    console.log('✓ Backend says OWNER');
                 }
-            } catch (error) {
-                console.log('Backend check failed or timed out, using stored role');
             }
+        } catch (error) {
+            console.log('Backend check failed or timed out, using stored role');
         }
         
         // STEP 5: Fallback to any stored role
@@ -606,12 +641,13 @@ function updateUIForRole() {
     console.log('=== UI UPDATE COMPLETE ===');
 }
 
-// Helper function to get auth token
-async function getAuthToken() {
-    if (!clerk || !clerk.session) {
-        throw new Error('Not authenticated');
-    }
-    return await clerk.session.getToken();
+// Helper to get auth headers
+async function getAuthHeaders() {
+    const session = await authClient.getSession();
+    return {
+        'Authorization': `Bearer ${session.session.token}`,
+        'Content-Type': 'application/json'
+    };
 }
 
 // === TAB NAVIGATION ===
@@ -716,7 +752,7 @@ async function loadProjects(filters = {}, page = 1) {
         
         const url = `${API_URL}/projects?${params.toString()}`;
         
-        const result = await safeFetch(url, {}, () => loadProjects(filters, page));
+        const result = await safeFetch(url, {}, () => loadProjects(filters, page), true); // Enable caching
         
         if (!result.success) {
             throw new Error(result.error);
@@ -819,14 +855,14 @@ function displayProjects(projects) {
                     View Applicants (${project.applicantsCount})
                 </button>
                 <button class="btn-secondary btn-small" onclick="viewFeedbackWithDownload('${project._id}', '${escapeHtml(project.title)}')">
-    View Feedback (${project.reviewsCount})
-                        </button>
+                    View Feedback (${project.reviewsCount})
+                </button>
                 <button class="btn-danger btn-small" onclick="deleteProject('${project._id}')">Delete</button>
             `;
         } else {
             actionsHTML = `
-               <button class="btn-secondary btn-small" onclick="viewFeedbackWithDownload('${project._id}', '${escapeHtml(project.title)}')">
-    View Feedback (${project.reviewsCount})
+                <button class="btn-secondary btn-small" onclick="viewFeedbackWithDownload('${project._id}', '${escapeHtml(project.title)}')">
+                    View Feedback (${project.reviewsCount})
                 </button>
             `;
         }
@@ -862,9 +898,10 @@ function displayProjects(projects) {
             <p class="project-desc">${escapeHtml(project.description)}</p>
             <a href="${project.link}" target="_blank" class="project-link">🔗 ${project.link}</a>
             <div class="project-meta">
- <a href="owner-profile.html?id=${project.ownerId}" class="project-owner" style="text-decoration: none; cursor: pointer;">
+                <a href="owner-profile.html?id=${project.ownerId}" class="project-owner" style="text-decoration: none; cursor: pointer;">
                     By ${escapeHtml(project.ownerName)} →
-                </a>                <span class="project-xp">+${project.xpReward} XP</span>
+                </a>
+                <span class="project-xp">+${project.xpReward} XP</span>
             </div>
             <p class="project-applicants">📋 ${project.applicantsCount} applicants | ✅ ${project.approvedCount} approved</p>
             <div class="project-actions">
@@ -886,13 +923,9 @@ if (uploadForm) {
         submitBtn.textContent = 'Uploading...';
         
         try {
-            console.log('Getting auth token...');
-            const token = await getAuthToken();
-            console.log('Token received:', token ? 'Yes' : 'No');
-            
-            if (!token) {
-                throw new Error('Not authenticated. Please sign in again.');
-            }
+            console.log('Getting auth headers...');
+            const headers = await getAuthHeaders();
+            console.log('Headers received');
             
             if (!currentUser || !currentUser.id) {
                 throw new Error('User session invalid. Please sign in again.');
@@ -900,52 +933,44 @@ if (uploadForm) {
             
             console.log('Current user ID:', currentUser.id);
             
-            const ownerName = currentUser.fullName || 
-                  currentUser.firstName || 
-                  currentUser.username || 
-                  currentUser.primaryEmailAddress?.emailAddress || 
-                  'Anonymous';
+            const ownerName = currentUser.name || currentUser.email || 'Anonymous';
+            console.log('Using owner name:', ownerName);
 
-console.log('Using owner name:', ownerName);
+            const ownerEmail = currentUser.email || '';
 
-const ownerEmail = currentUser.primaryEmailAddress?.emailAddress || '';
+            const deadlineValue = document.getElementById('deadline').value;
+            const deadline = new Date(deadlineValue);
 
-const deadlineValue = document.getElementById('deadline').value;
-const deadline = new Date(deadlineValue);
+            // Validate deadline is in future
+            if (deadline <= new Date()) {
+                throw new Error('Deadline must be in the future');
+            }
 
-// Validate deadline is in future
-if (deadline <= new Date()) {
-    throw new Error('Deadline must be in the future');
-}
+            const projectData = {
+                title: document.getElementById('title').value.trim(),
+                description: document.getElementById('description').value.trim(),
+                type: document.getElementById('type').value,
+                link: document.getElementById('link').value.trim(),
+                ownerId: currentUser.id,
+                ownerName: ownerName,
+                ownerEmail: ownerEmail,
+                xpReward: parseInt(document.getElementById('xpReward').value),
+                deadline: deadline.toISOString()
+            };
 
-const projectData = {
-    title: document.getElementById('title').value.trim(),
-    description: document.getElementById('description').value.trim(),
-    type: document.getElementById('type').value,
-    link: document.getElementById('link').value.trim(),
-    ownerId: currentUser.id,
-    ownerName: ownerName,
-    ownerEmail: ownerEmail,
-    xpReward: parseInt(document.getElementById('xpReward').value),
-    deadline: deadline.toISOString()
-};
-
-console.log('Project data:', projectData);
+            console.log('Project data:', projectData);
             
             const result = await safeFetch(`${API_URL}/projects`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(projectData)
-        }, () => uploadForm.dispatchEvent(new Event('submit')));
+                method: 'POST',
+                headers,
+                body: JSON.stringify(projectData)
+            }, () => uploadForm.dispatchEvent(new Event('submit')));
         
-        if (result.success) {
-            showSuccessNotification('Project uploaded successfully!');
-            uploadForm.reset();
-            document.querySelector('[data-tab="projects"]').click();
-        }
+            if (result.success) {
+                showSuccessNotification('Project uploaded successfully!');
+                uploadForm.reset();
+                document.querySelector('[data-tab="projects"]').click();
+            }
             
         } catch (error) {
             console.error('Upload error:', error);
@@ -964,13 +989,11 @@ async function deleteProject(id) {
     }
     
     try {
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
         const result = await safeFetch(`${API_URL}/projects/${id}`, {
             method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => deleteProject(id));
         
         if (result.success) {
@@ -1011,7 +1034,7 @@ function displayReviewers(reviewers) {
         const card = document.createElement('div');
         card.className = 'reviewer-card';
         
-       card.style.cursor = 'pointer';
+        card.style.cursor = 'pointer';
         card.onclick = () => window.location.href = `reviewer-profile.html?id=${reviewer._id}`;
         
         card.innerHTML = `
@@ -1169,6 +1192,7 @@ async function openApplicationModal(projectId, title, type, xpReward) {
     
     applicationModal.classList.add('active');
 }
+
 // Open Feedback Submission Modal
 function openFeedbackModal(projectId, projectTitle) {
     currentProjectForFeedback = projectId;
@@ -1195,22 +1219,19 @@ if (feedbackForm) {
         submitBtn.textContent = 'Submitting...';
         
         try {
-            const token = await getAuthToken();
+            const headers = await getAuthHeaders();
             
             const feedbackData = {
                 projectId: currentProjectForFeedback,
                 reviewerId: currentReviewerId,
-                reviewerUsername: clerk.user.username || clerk.user.primaryEmailAddress.emailAddress,
+                reviewerUsername: currentUser.name || currentUser.email,
                 feedbackText: document.getElementById('feedbackText').value.trim(),
                 projectRating: document.getElementById('projectRating').value ? parseInt(document.getElementById('projectRating').value) : null
             };
             
             const result = await safeFetch(`${API_URL}/feedback`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify(feedbackData)
             }, () => feedbackForm.dispatchEvent(new Event('submit')));
             
@@ -1241,22 +1262,19 @@ if (applicationForm) {
         }
         
         try {
-            const token = await getAuthToken();
+            const headers = await getAuthHeaders();
             
             const applicationData = {
                 projectId: currentProjectForApplication,
                 reviewerId: currentReviewerId,
-                reviewerUsername: clerk.user.username || clerk.user.primaryEmailAddress.emailAddress,
+                reviewerUsername: currentUser.name || currentUser.email,
                 qualifications: document.getElementById('qualifications').value.trim(),
                 focusAreas: document.getElementById('focusAreas').value.trim()
             };
             
             const result = await safeFetch(`${API_URL}/applications`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                },
+                headers,
                 body: JSON.stringify(applicationData)
             }, () => applicationForm.dispatchEvent(new Event('submit')));
             
@@ -1281,12 +1299,10 @@ async function viewApplicants(projectId) {
         
         applicantsModal.classList.add('active');
         
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
         const result = await safeFetch(`${API_URL}/applications/project/${projectId}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => viewApplicants(projectId));
         
         if (result.success) {
@@ -1301,56 +1317,79 @@ async function viewApplicants(projectId) {
 
 function displayApplicants(applications, projectId) {
     const applicantsList = document.getElementById('applicantsList');
-    
+
     if (applications.length === 0) {
         applicantsList.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No applicants yet</div></div>';
         return;
     }
-    
+
     applicantsList.innerHTML = '';
-    
+
     applications.forEach(app => {
         const card = document.createElement('div');
         card.className = 'applicant-card';
-        
+
         const reviewer = app.reviewerId;
         const appliedDate = new Date(app.appliedAt).toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
-            year: 'numeric'
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
         });
-        
+
+        const ndaDate = new Date(app.ndaAcceptedAt).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+
         card.innerHTML = `
             <div class="applicant-header">
                 <div class="applicant-info">
                     <h4>${escapeHtml(app.reviewerUsername)}</h4>
                     <p class="applicant-stats">
-                        Level ${reviewer.level} • ${reviewer.xp} XP • 
-                        ${reviewer.totalReviews} reviews • 
+                        Level ${reviewer.level} • ${reviewer.xp} XP •
+                        ${reviewer.totalReviews} reviews •
                         ${reviewer.averageRating.toFixed(1)}★ rating
                     </p>
                 </div>
                 <span class="applicant-status status-${app.status}">${app.status}</span>
             </div>
-            
+
             <div class="applicant-text">
                 <h5>Qualifications</h5>
                 <p>${escapeHtml(app.qualifications)}</p>
             </div>
-            
+
             <div class="applicant-text">
                 <h5>Focus Areas</h5>
                 <p>${escapeHtml(app.focusAreas)}</p>
             </div>
-            
-            <div class="nda-status" style="margin-bottom: 1rem;">
-                <p style="color: #6B7280; font-size: 0.85rem;">Applied on ${appliedDate}</p>
-                <p style="color: #10B981; font-size: 0.85rem; font-weight: 600;">
-                    ✓ NDA Accepted on ${new Date(app.ndaAcceptedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </p>
-                <p style="color: #6B7280; font-size: 0.75rem;">IP: ${app.applicantIp}</p>
+
+            <!-- NDA Status Box -->
+            <div class="nda-status-display">
+                <div class="nda-status-header">
+                    <span class="nda-status-badge">✓ NDA ACCEPTED</span>
+                </div>
+                <div class="nda-status-details">
+                    <div class="nda-detail-row">
+                        <span class="nda-detail-label">Accepted:</span>
+                        <span class="nda-detail-value">${ndaDate}</span>
+                    </div>
+                    <div class="nda-detail-row">
+                        <span class="nda-detail-label">Applied:</span>
+                        <span class="nda-detail-value">${appliedDate}</span>
+                    </div>
+                    <div class="nda-detail-row">
+                        <span class="nda-detail-label">IP Address:</span>
+                        <span class="nda-detail-value">${app.applicantIp}</span>
+                    </div>
+                </div>
             </div>
-            
+
             ${app.status === 'pending' ? `
                 <div class="applicant-actions">
                     <button class="btn-success" onclick="approveApplication('${app._id}', '${projectId}')">
@@ -1362,20 +1401,18 @@ function displayApplicants(applications, projectId) {
                 </div>
             ` : ''}
         `;
-        
+
         applicantsList.appendChild(card);
     });
 }
 
 async function approveApplication(applicationId, projectId) {
     try {
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
         const result = await safeFetch(`${API_URL}/applications/${applicationId}/approve`, {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => approveApplication(applicationId, projectId));
         
         if (result.success) {
@@ -1395,13 +1432,11 @@ async function rejectApplication(applicationId, projectId) {
     }
     
     try {
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
         const result = await safeFetch(`${API_URL}/applications/${applicationId}/reject`, {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            }
+            headers
         }, () => rejectApplication(applicationId, projectId));
         
         if (result.success) {
@@ -1492,6 +1527,7 @@ function displayFeedback(feedbackList) {
         container.appendChild(card);
     });
 }
+
 // Download feedback as text file
 let currentProjectFeedback = [];
 let currentProjectTitle = '';
@@ -1590,14 +1626,11 @@ async function rateFeedback(feedbackId, rating) {
     }
     
     try {
-        const token = await getAuthToken();
+        const headers = await getAuthHeaders();
         
         const result = await safeFetch(`${API_URL}/feedback/${feedbackId}/rate`, {
             method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
+            headers,
             body: JSON.stringify({ rating })
         }, () => rateFeedback(feedbackId, rating));
         
@@ -1673,35 +1706,64 @@ if (filterType) {
         loadProjects(filters);
     });
 }
-// Search functionality
+
+// === ENHANCED SEARCH ===
 const searchProjects = document.getElementById('searchProjects');
-const filterMinXP = document.getElementById('filterMinXP');
 
 if (searchProjects) {
+    let searchTimeout;
+    
     searchProjects.addEventListener('input', (e) => {
-        const searchTerm = e.target.value.toLowerCase();
-        const cards = document.querySelectorAll('.project-card');
+        clearTimeout(searchTimeout);
         
-        cards.forEach(card => {
-            const title = card.querySelector('h3').textContent.toLowerCase();
-            const desc = card.querySelector('.project-desc').textContent.toLowerCase();
+        // Debounce search
+        searchTimeout = setTimeout(() => {
+            const searchTerm = e.target.value.toLowerCase().trim();
             
-            if (title.includes(searchTerm) || desc.includes(searchTerm)) {
-                card.style.display = 'block';
-            } else {
-                card.style.display = 'none';
+            if (searchTerm.length === 0) {
+                // Reset to current filters
+                loadProjects(currentProjectsFilters, 1);
+                return;
             }
-        });
+
+            if (searchTerm.length < 2) {
+                return; // Wait for at least 2 characters
+            }
+
+            // Search in loaded projects first (instant feedback)
+            const cards = document.querySelectorAll('.project-card');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const title = card.querySelector('h3').textContent.toLowerCase();
+                const desc = card.querySelector('.project-desc').textContent.toLowerCase();
+                const owner = card.querySelector('.project-owner')?.textContent.toLowerCase() || '';
+
+                if (title.includes(searchTerm) || desc.includes(searchTerm) || owner.includes(searchTerm)) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Show "no results" if needed
+            if (visibleCount === 0) {
+                projectsGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No projects found</div><div class="empty-message">Try different search terms</div></div>';
+            }
+        }, 300); // 300ms debounce
     });
 }
 
 // Sort projects
 const sortProjects = document.getElementById('sortProjects');
+const filterMinXP = document.getElementById('filterMinXP');
+
 if (sortProjects) {
     sortProjects.addEventListener('change', (e) => {
         const filters = {};
         if (filterType.value) filters.type = filterType.value;
-        if (filterMinXP.value) filters.minXP = filterMinXP.value;
+        if (filterMinXP && filterMinXP.value) filters.minXP = filterMinXP.value;
         if (e.target.value) filters.sort = e.target.value;
         
         loadProjects(filters, 1);
@@ -1725,7 +1787,7 @@ if (filterMinXP) {
         const filters = {};
         if (filterType.value) filters.type = filterType.value;
         if (e.target.value) filters.minXP = e.target.value;
-        if (sortProjects.value) filters.sort = sortProjects.value;
+        if (sortProjects && sortProjects.value) filters.sort = sortProjects.value;
         
         loadProjects(filters, 1);
     });
@@ -1776,28 +1838,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateStats();
     loadNotifications();
     
-    // Load dashboard based on role
     // Initialize UI for role
-    // Load dashboard based on role
-updateUIForRole();
+    updateUIForRole();
 
-// Load initial data
-console.log('Loading initial data...');
+    // Load initial data
+    console.log('Loading initial data...');
 
-if (userRole === 'owner') {
-    document.getElementById('reviewerDashboard').style.display = 'none';
-    document.getElementById('ownerDashboard').style.display = 'block';
-    // Add any owner-specific initialization here
-} else if (userRole === 'reviewer') {
-    document.getElementById('ownerDashboard').style.display = 'none';
-    document.getElementById('reviewerDashboard').style.display = 'block';
-    loadReviewerDashboard();
-}
+    if (userRole === 'owner') {
+        document.getElementById('reviewerDashboard').style.display = 'none';
+        document.getElementById('ownerDashboard').style.display = 'block';
+    } else if (userRole === 'reviewer') {
+        document.getElementById('ownerDashboard').style.display = 'none';
+        document.getElementById('reviewerDashboard').style.display = 'block';
+        loadReviewerDashboard();
+    }
 
-// Refresh notifications every 30 seconds
-setInterval(loadNotifications, 30000);
+    // Refresh notifications every 30 seconds
+    setInterval(loadNotifications, 30000);
 
-// Load projects for reviewers
+    // Load projects for reviewers
     if (userRole === 'reviewer') {
         loadProjectsForApplication();
     }
@@ -1832,4 +1891,4 @@ window.downloadFeedback = downloadFeedback;
 window.viewFeedbackWithDownload = viewFeedbackWithDownload;
 
 console.log('HelpMarq Frontend Connected:', API_URL);
-console.log('Authentication: Clerk Active');
+console.log('Authentication: Better Auth Active');

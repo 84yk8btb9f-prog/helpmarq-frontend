@@ -14,7 +14,45 @@
                 <p class="tagline">Expert insights. Accessible pricing.</p>
             </div>
             
-            <div id="clerk-signup"></div>
+            <form id="signupForm" class="form">
+                <div class="form-group">
+                    <label for="name">Full Name *</label>
+                    <input 
+                        type="text" 
+                        id="name" 
+                        placeholder="John Doe"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        placeholder="your@email.com"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password *</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        placeholder="••••••••"
+                        minlength="8"
+                        required
+                    >
+                    <small>Minimum 8 characters</small>
+                </div>
+
+                <button type="submit" class="btn-primary" id="signupBtn">
+                    Create Account
+                </button>
+            </form>
+
+            <div id="message" class="message"></div>
             
             <div class="auth-footer">
                 <p>Already have an account? <a href="login.html">Log in</a></p>
@@ -22,38 +60,46 @@
         </div>
     </div>
 
-    <script 
-        async 
-        crossorigin="anonymous" 
-        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
-        onload="window.Clerk.load()"
-        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
-    ></script>
+    <script type="module">
+        import { authClient } from './lib/auth.js';
 
-    <script>
-        window.addEventListener('load', async () => {
-            if (!window.Clerk) {
-                console.error('Clerk failed to load');
-                return;
-            }
+        const form = document.getElementById('signupForm');
+        const message = document.getElementById('message');
+        const signupBtn = document.getElementById('signupBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
             
-            await window.Clerk.load();
+            signupBtn.disabled = true;
+            signupBtn.textContent = 'Creating account...';
+            message.style.display = 'none';
             
-            if (window.Clerk.user) {
-                window.location.href = 'role-select.html';
-                return;
-            }
-            
-            const signUpDiv = document.getElementById('clerk-signup');
-            
-            window.Clerk.mountSignUp(signUpDiv, {
-                afterSignUpUrl: window.location.origin + '/role-select.html',
-                appearance: {
-                    elements: {
-                        footerActionLink: { display: 'none' }
-                    }
+            try {
+                const name = document.getElementById('name').value;
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+
+                const result = await authClient.signUp.email({
+                    email,
+                    password,
+                    name
+                });
+
+                if (result.error) {
+                    throw new Error(result.error.message || 'Signup failed');
                 }
-            });
+
+                // Success - redirect to role selection
+                window.location.href = 'role-select.html';
+                
+            } catch (error) {
+                message.textContent = '❌ ' + error.message;
+                message.className = 'message error';
+                message.style.display = 'block';
+                
+                signupBtn.disabled = false;
+                signupBtn.textContent = 'Create Account';
+            }
         });
     </script>
 </body>

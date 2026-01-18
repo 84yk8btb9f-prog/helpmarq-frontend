@@ -2295,4 +2295,182 @@ body:has([class*="cl-modal"]) {
     right: 0 !important;
     bottom: 0 !important;
 }
+/* === MOBILE-FIRST IMPROVEMENTS === */
+
+/* Better touch targets */
+@media (max-width: 768px) {
+    /* Minimum tap target size 44x44px */
+    button,
+    .tab-btn,
+    .btn-primary,
+    .btn-secondary,
+    .btn-success,
+    .btn-danger,
+    .project-card button,
+    .reviewer-card,
+    .applicant-card button {
+        min-height: 44px;
+        min-width: 44px;
+    }
+
+    /* Prevent text zoom on input focus (iOS) */
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    /* Better spacing for touch */
+    .project-actions,
+    .applicant-actions {
+        gap: var(--space-2);
+    }
+
+    /* Sticky header on scroll */
+    .header {
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        margin-bottom: var(--space-2);
+    }
+
+    /* Tab navigation sticky */
+    .tab-nav {
+        position: sticky;
+        top: 0;
+        z-index: 99;
+        margin-bottom: var(--space-2);
+    }
+
+    /* Full-width modals */
+    .modal-content {
+        width: 100%;
+        max-width: 100%;
+        margin: var(--space-2);
+        border-radius: 12px;
+    }
+
+    /* Better form spacing */
+    .form-group {
+        margin-bottom: var(--space-3);
+    }
+
+    /* Larger pagination buttons */
+    .pagination-btn {
+        min-height: 44px;
+        padding: 12px 16px;
+    }
+
+    /* Swipe-friendly cards */
+    .project-card,
+    .reviewer-card,
+    .applicant-card {
+        margin-bottom: var(--space-2);
+    }
+}
+
+/* Landscape mode optimizations */
+@media (max-width: 768px) and (orientation: landscape) {
+    .header {
+        padding: var(--space-2);
+    }
+
+    .modal-content {
+        max-height: 85vh;
+        overflow-y: auto;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 375px) {
+    body {
+        padding: var(--space-1);
+    }
+
+    .header {
+        padding: var(--space-2);
+    }
+
+    .section {
+        padding: var(--space-2);
+    }
+
+    .stat {
+        padding: var(--space-2);
+    }
+
+    .stat-value {
+        font-size: 20px;
+    }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-top)) {
+    body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+    }
+}
+/* === NDA STATUS DISPLAY === */
+.nda-status-display {
+    background: linear-gradient(135deg, #D1FAE5 0%, #A7F3D0 100%);
+    border: 2px solid var(--success-green);
+    border-radius: 10px;
+    padding: var(--space-2);
+    margin: var(--space-2) 0;
+}
+
+.nda-status-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-bottom: var(--space-2);
+    padding-bottom: var(--space-1);
+    border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.nda-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--success-green);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.nda-status-details {
+    display: grid;
+    gap: var(--space-1);
+}
+
+.nda-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+.nda-detail-label {
+    color: #065F46;
+    font-weight: 600;
+}
+
+.nda-detail-value {
+    color: #047857;
+    font-family: monospace;
+}
+
+@media (max-width: 768px) {
+    .nda-detail-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+}
 /* === END OF BRAND-ALIGNED STYLES === */

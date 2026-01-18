@@ -14,7 +14,33 @@
                 <p class="tagline">Expert insights. Accessible pricing.</p>
             </div>
             
-            <div id="clerk-signin"></div>
+            <form id="loginForm" class="form">
+                <div class="form-group">
+                    <label for="email">Email *</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        placeholder="your@email.com"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password *</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        placeholder="••••••••"
+                        required
+                    >
+                </div>
+
+                <button type="submit" class="btn-primary" id="loginBtn">
+                    Log In
+                </button>
+            </form>
+
+            <div id="message" class="message"></div>
             
             <div class="auth-footer">
                 <p>Don't have an account? <a href="signup.html">Sign up</a></p>
@@ -22,38 +48,44 @@
         </div>
     </div>
 
-    <script 
-        async 
-        crossorigin="anonymous" 
-        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
-        onload="window.Clerk.load()"
-        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
-    ></script>
+    <script type="module">
+        import { authClient } from './lib/auth.js';
 
-    <script>
-        window.addEventListener('load', async () => {
-            if (!window.Clerk) {
-                console.error('Clerk failed to load');
-                return;
-            }
+        const form = document.getElementById('loginForm');
+        const message = document.getElementById('message');
+        const loginBtn = document.getElementById('loginBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
             
-            await window.Clerk.load();
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            message.style.display = 'none';
             
-            if (window.Clerk.user) {
-                window.location.href = 'index.html';
-                return;
-            }
-            
-            const signInDiv = document.getElementById('clerk-signin');
-            
-            window.Clerk.mountSignIn(signInDiv, {
-                afterSignInUrl: window.location.origin + '/index.html',
-                appearance: {
-                    elements: {
-                        footerActionLink: { display: 'none' }
-                    }
+            try {
+                const email = document.getElementById('email').value;
+                const password = document.getElementById('password').value;
+
+                const result = await authClient.signIn.email({
+                    email,
+                    password
+                });
+
+                if (result.error) {
+                    throw new Error(result.error.message || 'Login failed');
                 }
-            });
+
+                // Success - redirect
+                window.location.href = 'index.html';
+                
+            } catch (error) {
+                message.textContent = '❌ ' + error.message;
+                message.className = 'message error';
+                message.style.display = 'block';
+                
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Log In';
+            }
         });
     </script>
 </body>
