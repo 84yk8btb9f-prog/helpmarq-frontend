@@ -139,7 +139,7 @@ let currentReviewerId = null;
 
 const API_URL = window.location.hostname === 'localhost' 
     ? 'http://localhost:3000/api'
-    : 'https://helpmarq-backend.onrender.com';
+    : 'https://helpmarq-backend.onrender.com/';
 // State
 let currentProjectForApplication = null;
 // Notifications
