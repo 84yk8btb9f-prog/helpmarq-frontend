@@ -452,72 +452,101 @@ async function loadUserRole() {
     console.log('=== LOAD USER ROLE START ===');
     
     try {
-        // FIRST: Check localStorage
-        const storedRole = localStorage.getItem('userRole');
-        console.log('Stored role in localStorage:', storedRole);
+        // STEP 1: Check localStorage (primary source)
+        let storedRole = localStorage.getItem('userRole');
+        console.log('1. localStorage role:', storedRole);
         
-        // SECOND: Check backend
+        // STEP 2: Check sessionStorage (backup)
+        const sessionRole = sessionStorage.getItem('userRole');
+        console.log('2. sessionStorage role:', sessionRole);
+        
+        // STEP 3: Check if just selected role
+        const justSelected = sessionStorage.getItem('roleJustSelected');
+        console.log('3. Just selected role:', justSelected);
+        
+        // If we have a stored role AND just selected, USE IT IMMEDIATELY
+        if (storedRole && justSelected === 'true') {
+            userRole = storedRole;
+            console.log('✓✓✓ USING JUST-SELECTED ROLE:', userRole);
+            sessionStorage.removeItem('roleJustSelected');
+            updateUIForRole();
+            return;
+        }
+        
+        // STEP 4: Try backend (but don't wait forever)
         const token = await getAuthToken();
-        console.log('Got auth token:', token ? 'YES' : 'NO');
         
-        const result = await safeFetch(`${API_URL}/auth/me`, {
-            headers: {
-                'Authorization': `Bearer ${token}`
+        if (token) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+                
+                const result = await fetch(`${API_URL}/auth/me`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    signal: controller.signal
+                }).then(res => res.json());
+                
+                clearTimeout(timeoutId);
+                
+                console.log('4. Backend response:', result);
+                
+                if (result.success) {
+                    if (result.role === 'reviewer') {
+                        userRole = 'reviewer';
+                        currentReviewerId = result.data._id;
+                        localStorage.setItem('userRole', 'reviewer');
+                        console.log('✓ Backend says REVIEWER');
+                    } else if (result.role === 'owner') {
+                        userRole = 'owner';
+                        localStorage.setItem('userRole', 'owner');
+                        console.log('✓ Backend says OWNER');
+                    }
+                }
+            } catch (error) {
+                console.log('Backend check failed or timed out, using stored role');
             }
-        }, () => loadUserRole());
+        }
         
-        console.log('Backend /auth/me response:', result);
+        // STEP 5: Fallback to any stored role
+        if (!userRole && storedRole) {
+            userRole = storedRole;
+            console.log('✓ Using stored role:', storedRole);
+        }
         
-        if (result.success) {
-            // Priority 1: Backend confirms reviewer
-            if (result.role === 'reviewer') {
-                userRole = 'reviewer';
-                currentReviewerId = result.data._id;
-                localStorage.setItem('userRole', 'reviewer');
-                console.log('✓ Role set to REVIEWER from backend');
-            } 
-            // Priority 2: Backend confirms owner
-            else if (result.role === 'owner') {
-                userRole = 'owner';
-                localStorage.setItem('userRole', 'owner');
-                console.log('✓ Role set to OWNER from backend');
-            }
-            // Priority 3: No backend role, use localStorage
-            else if (storedRole) {
-                userRole = storedRole;
-                console.log('✓ Using stored role:', storedRole);
-            }
-            // Priority 4: No role anywhere - must select
-            else {
-                console.log('⚠️ No role found - redirecting to role selection');
-                // Clear any stale data
-                localStorage.clear();
-                sessionStorage.clear();
-                window.location.href = 'role-select.html';
-                return;
-            }
+        if (!userRole && sessionRole) {
+            userRole = sessionRole;
+            localStorage.setItem('userRole', sessionRole);
+            console.log('✓ Using session role:', sessionRole);
+        }
+        
+        // STEP 6: If STILL no role, redirect to selection
+        if (!userRole) {
+            console.log('❌ NO ROLE FOUND - redirecting to role-select');
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = 'role-select.html';
+            return;
         }
         
         console.log('=== FINAL ROLE:', userRole, '===');
         
-        // IMMEDIATELY update UI
-        if (userRole) {
-            updateUIForRole();
-        }
+        // Update UI immediately
+        updateUIForRole();
         
     } catch (error) {
-        console.error('Error in loadUserRole:', error);
+        console.error('CRITICAL ERROR in loadUserRole:', error);
         
-        // Fallback to localStorage
-        const storedRole = localStorage.getItem('userRole');
-        if (storedRole) {
-            userRole = storedRole;
-            console.log('✓ Using stored role after error:', storedRole);
+        // Last resort: check storage one more time
+        const lastResort = localStorage.getItem('userRole') || sessionStorage.getItem('userRole');
+        
+        if (lastResort) {
+            userRole = lastResort;
+            console.log('✓ EMERGENCY: Using last resort role:', lastResort);
             updateUIForRole();
         } else {
-            console.error('❌ No stored role - redirecting to role selection');
-            localStorage.clear();
-            sessionStorage.clear();
+            console.log('❌ TOTAL FAILURE - redirecting to role-select');
             window.location.href = 'role-select.html';
         }
     }
@@ -590,48 +619,61 @@ const tabBtns = document.querySelectorAll('.tab-btn');
 const tabContents = document.querySelectorAll('.tab-content');
 
 tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
         const targetTab = btn.dataset.tab;
         
-        console.log('Tab clicked:', targetTab);
-        console.log('Current user role:', userRole);
+        console.log('=== TAB CLICKED:', targetTab, '===');
+        console.log('Current userRole:', userRole);
+        
+        // CRITICAL: If clicking dashboard, ENSURE role exists
+        if (targetTab === 'dashboard') {
+            // Wait up to 3 seconds for role to load
+            let attempts = 0;
+            while (!userRole && attempts < 15) {
+                console.log('Waiting for role... attempt', attempts + 1);
+                await new Promise(resolve => setTimeout(resolve, 200));
+                attempts++;
+            }
+            
+            if (!userRole) {
+                console.error('❌ NO ROLE AFTER 3 SECONDS - redirecting to role-select');
+                alert('Please select your role first');
+                window.location.href = 'role-select.html';
+                return;
+            }
+            
+            console.log('✓ Role confirmed:', userRole);
+        }
         
         tabBtns.forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         
         tabContents.forEach(content => content.classList.remove('active'));
         document.getElementById(`${targetTab}-tab`).classList.add('active');
-
-        // Tab-Specific Logic
+        
         if (targetTab === 'dashboard') {
-            console.log('Dashboard tab clicked');
-            console.log('Current userRole:', userRole);
-            
-            if (!userRole) {
-                console.error('No role detected for dashboard');
-                alert('Please select your role first');
-                window.location.href = 'role-select.html';
-                return;
-            }
+            console.log('Loading dashboard for role:', userRole);
             
             if (userRole === 'owner') {
-                console.log('Loading owner dashboard');
                 const ownerDash = document.getElementById('ownerDashboard');
                 const reviewerDash = document.getElementById('reviewerDashboard');
+                
                 if (ownerDash) ownerDash.style.display = 'block';
                 if (reviewerDash) reviewerDash.style.display = 'none';
+                
                 loadOwnerDashboard();
             } else if (userRole === 'reviewer') {
-                console.log('Loading reviewer dashboard');
                 const ownerDash = document.getElementById('ownerDashboard');
                 const reviewerDash = document.getElementById('reviewerDashboard');
+                
                 if (ownerDash) ownerDash.style.display = 'none';
                 if (reviewerDash) reviewerDash.style.display = 'block';
+                
                 loadReviewerDashboard();
-            } else {
-                console.error('Unknown role:', userRole);
             }
-        } else if (targetTab === 'projects') {
+        }
+        
+        if (targetTab === 'projects') {
             loadProjects();
         } else if (targetTab === 'reviewers') {
             loadReviewers();

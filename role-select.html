@@ -98,5 +98,68 @@
             console.log('Role selection ready');
         });
     </script>
+    <script>
+    window.addEventListener('load', async () => {
+        console.log('=== ROLE SELECT PAGE LOADED ===');
+        
+        if (!window.Clerk) {
+            alert('Authentication failed to load. Please refresh.');
+            return;
+        }
+        
+        await window.Clerk.load();
+        
+        if (!window.Clerk.user) {
+            console.log('No user, redirecting to login');
+            window.location.href = 'login.html';
+            return;
+        }
+
+        console.log('✓ User authenticated:', window.Clerk.user.id);
+
+        // CRITICAL: Check if role already exists
+        const existingRole = localStorage.getItem('userRole');
+        if (existingRole) {
+            console.log('⚠️ Role already exists:', existingRole, '- redirecting to app');
+            window.location.href = 'index.html';
+            return;
+        }
+
+        // Role selection handlers
+        window.selectRole = function(role) {
+            console.log('=== ROLE SELECTED:', role, '===');
+            
+            // TRIPLE-SAVE to ensure persistence
+            localStorage.setItem('userRole', role);
+            sessionStorage.setItem('userRole', role);
+            sessionStorage.setItem('roleJustSelected', 'true');
+            
+            // Verify it saved
+            const saved = localStorage.getItem('userRole');
+            console.log('✓ Role saved and verified:', saved);
+            
+            if (saved !== role) {
+                alert('Failed to save role. Please try again.');
+                return;
+            }
+            
+            // Redirect based on role
+            if (role === 'owner') {
+                console.log('→ Redirecting to index.html');
+                setTimeout(() => {
+                    window.location.replace('index.html'); // Use replace to prevent back button issues
+                }, 200);
+                
+            } else if (role === 'reviewer') {
+                console.log('→ Redirecting to create-reviewer.html');
+                setTimeout(() => {
+                    window.location.replace('create-reviewer.html');
+                }, 200);
+            }
+        };
+        
+        console.log('Role selection ready');
+    });
+</script>
 </body>
 </html>

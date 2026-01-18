@@ -458,22 +458,37 @@
     ></script>
 
     <script>
-        window.addEventListener('load', async () => {
-            console.log('Index page loading...');
-            
-            if (!window.Clerk) {
-                console.error('Clerk failed to load');
-                return;
-            }
-            
-            await window.Clerk.load();
-            console.log('Clerk loaded');
+       window.addEventListener('load', async () => {
+    console.log('=== INDEX PAGE LOAD START ===');
+    
+    if (!window.Clerk) {
+        console.error('Clerk failed to load');
+        window.location.href = 'login.html';
+        return;
+    }
+    
+    try {
+        await window.Clerk.load();
+        console.log('✓ Clerk loaded');
+    } catch (error) {
+        console.error('Clerk load error:', error);
+        window.location.href = 'login.html';
+        return;
+    }
 
-            if (!window.Clerk.user) {
-                console.log('No user, redirecting to login');
-                window.location.href = 'login.html';
-                return;
-            }
+    if (!window.Clerk.user) {
+        console.log('No user - redirecting to login');
+        
+        // Clear any stale data
+        localStorage.clear();
+        sessionStorage.clear();
+        
+        // Redirect
+        window.location.href = 'login.html';
+        return;
+    }
+    
+    console.log('✓ User authenticated:', window.Clerk.user.id);
 
             console.log('User found:', window.Clerk.user.id);
             window.clerk = window.Clerk;
