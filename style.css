@@ -2228,18 +2228,63 @@ body:has(.cl-modalBackdrop) {
     position: fixed !important;
     inset: 0 !important;
 }
-/* === FINAL CLERK MODAL FIX === */
+/* === REFINED CLERK MODAL FIX === */
+
+/* 1. Reset all Clerk elements to allow full width, but avoid 'none' which can be too disruptive */
+[class*="cl-"] {
+    max-width: 100%;
+    box-sizing: border-box !important;
+}
+
+/* 2. Target specific cards with a safe range */
 .cl-card,
 .cl-modalContent,
-.cl-internal-b3fm6zn {
-    min-width: 400px !important;
-    max-width: 480px !important;
+.cl-rootBox,
+.cl-userProfileCard,
+.cl-organizationProfileCard {
+    /* Use clamp for responsiveness: min 320px, preferred 100%, max 600px */
+    width: 100% !important;
+    max-width: 600px !important;
+    min-width: 320px !important; 
     margin: 0 auto !important;
 }
 
+/* 3. Handle the small popover (User Button) */
 .cl-userButtonPopoverCard {
     min-width: 280px !important;
     max-width: 320px !important;
+}
+
+/* 4. FIXED: Correct attribute selector for internal classes */
+[class^="cl-internal-"] {
+    min-width: inherit !important;
+}
+
+/* 5. Modal backdrop positioning */
+.cl-modalBackdrop {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 9999 !important;
+}
+
+/* 6. Prevent body shift when modal opens */
+body:has([class*="cl-modal"]) {
+    overflow: hidden !important;
+}
+
+/* 7. Force proper width on all immediate modal children */
+.cl-card > * {
+    width: 100% !important;
+    max-width: 100% !important;
+}
+
+/* 8. Mobile adjustment to prevent overflow on very small screens */
+@media (max-width: 400px) {
+    .cl-card, 
+    .cl-modalContent, 
+    .cl-rootBox {
+        min-width: 100% !important;
+    }
 }
 
 /* Prevent body shift */

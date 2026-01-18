@@ -14,7 +14,10 @@
                 <p class="tagline">Expert insights. Accessible pricing.</p>
             </div>
             
-            <div id="clerk-signup"></div>
+            <div style="text-align: center; padding: 40px;">
+                <p style="color: #6B7280; margin-bottom: 24px;">Redirecting to sign up...</p>
+                <div style="animation: spin 1s linear infinite; font-size: 32px;">⏳</div>
+            </div>
             
             <div class="auth-footer">
                 <p>Already have an account? <a href="login.html">Log in</a></p>
@@ -22,7 +25,7 @@
         </div>
     </div>
 
-  <script 
+    <script 
         async 
         crossorigin="anonymous" 
         data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
@@ -30,31 +33,36 @@
         src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
     ></script>
 
-   <script>
-    window.addEventListener('load', async () => {
-        if (!window.Clerk) {
-            console.error('Clerk failed to load');
-            return;
-        }
-        
-        await window.Clerk.load();
-        
-        if (window.Clerk.user) {
-            window.location.href = 'role-select.html';
-            return;
-        }
-        
-        const signUpDiv = document.getElementById('clerk-signup');
-        
-        window.Clerk.mountSignUp(signUpDiv, {
-            afterSignUpUrl: window.location.origin + '/role-select.html',
-            appearance: {
-                elements: {
-                    footerActionLink: { display: 'none' }
-                }
+    <script>
+        window.addEventListener('load', async () => {
+            if (!window.Clerk) {
+                alert('Authentication system failed to load. Please refresh the page.');
+                return;
             }
+            
+            await window.Clerk.load();
+            
+            // If already signed in, go to role selection
+            if (window.Clerk.user) {
+                window.location.href = 'role-select.html';
+                return;
+            }
+            
+            // Clear any previous redirect flags
+            sessionStorage.removeItem('redirectedToSignIn');
+            
+            // Redirect to Clerk sign-up
+            window.Clerk.redirectToSignUp({
+                afterSignUpUrl: window.location.origin + '/role-select.html'
+            });
         });
-    });
-</script>
+    </script>
+    
+    <style>
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
 </body>
 </html>

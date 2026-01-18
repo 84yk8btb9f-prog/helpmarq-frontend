@@ -504,36 +504,56 @@ async function loadUserRole() {
 
 // Update UI based on user role
 function updateUIForRole() {
+    console.log('=== UPDATE UI FOR ROLE ===');
+    console.log('Current role:', userRole);
+    
     const uploadTabBtn = document.getElementById('uploadTabBtn');
     const applyTabBtn = document.getElementById('applyTabBtn');
     
-    console.log('=== UPDATE UI FOR ROLE ===');
-    console.log('Current role:', userRole);
-    console.log('Upload tab element:', uploadTabBtn);
-    console.log('Apply tab element:', applyTabBtn);
+    console.log('Upload button found:', !!uploadTabBtn);
+    console.log('Apply button found:', !!applyTabBtn);
     
+    // FORCE HIDE/SHOW based on role
     if (userRole === 'reviewer') {
-        console.log('Setting up REVIEWER UI');
+        console.log('REVIEWER MODE - Hiding upload, showing apply');
+        
+        // Hide upload tab
         if (uploadTabBtn) {
             uploadTabBtn.style.display = 'none';
-            console.log('✓ Upload tab hidden');
+            uploadTabBtn.style.visibility = 'hidden';
+            uploadTabBtn.remove(); // Completely remove from DOM
+            console.log('✓ Upload tab removed');
         }
+        
+        // Show apply tab
         if (applyTabBtn) {
             applyTabBtn.style.display = 'inline-block';
+            applyTabBtn.style.visibility = 'visible';
             console.log('✓ Apply tab shown');
         }
         
     } else if (userRole === 'owner') {
-        console.log('Setting up OWNER UI');
+        console.log('OWNER MODE - Hiding apply, showing upload');
+        
+        // Hide apply tab
         if (applyTabBtn) {
             applyTabBtn.style.display = 'none';
-            console.log('✓ Apply tab hidden');
+            applyTabBtn.style.visibility = 'hidden';
+            applyTabBtn.remove(); // Completely remove from DOM
+            console.log('✓ Apply tab removed');
         }
+        
+        // Show upload tab
         if (uploadTabBtn) {
             uploadTabBtn.style.display = 'inline-block';
+            uploadTabBtn.style.visibility = 'visible';
             console.log('✓ Upload tab shown');
         }
+    } else {
+        console.error('UNKNOWN ROLE:', userRole);
     }
+    
+    console.log('=== UI UPDATE COMPLETE ===');
 }
 
 // Helper function to get auth token
