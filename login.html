@@ -14,10 +14,7 @@
                 <p class="tagline">Expert insights. Accessible pricing.</p>
             </div>
             
-            <div style="text-align: center; padding: 40px;">
-                <p style="color: #6B7280; margin-bottom: 24px;">Redirecting to sign in...</p>
-                <div style="animation: spin 1s linear infinite; font-size: 32px;">⏳</div>
-            </div>
+            <div id="clerk-signin"></div>
             
             <div class="auth-footer">
                 <p>Don't have an account? <a href="signup.html">Sign up</a></p>
@@ -36,53 +33,28 @@
     <script>
         window.addEventListener('load', async () => {
             if (!window.Clerk) {
-                alert('Authentication system failed to load. Please refresh the page.');
+                console.error('Clerk failed to load');
                 return;
             }
             
             await window.Clerk.load();
             
-            // If already signed in, go to app
             if (window.Clerk.user) {
                 window.location.href = 'index.html';
                 return;
             }
             
-            // Redirect to Clerk sign-in (no infinite loop)
-            const currentUrl = window.location.href;
+            const signInDiv = document.getElementById('clerk-signin');
             
-            // Prevent redirect loop - only redirect once
-            if (!sessionStorage.getItem('redirectedToSignIn')) {
-                sessionStorage.setItem('redirectedToSignIn', 'true');
-                
-                window.Clerk.redirectToSignIn({
-                    afterSignInUrl: window.location.origin + '/index.html'
-                });
-            } else {
-                // If we've already redirected, show message
-                document.querySelector('.auth-container p').textContent = 
-                    'Please sign in to continue. If this page doesn\'t load, click below.';
-                
-                const btn = document.createElement('button');
-                btn.className = 'btn-primary';
-                btn.textContent = 'Sign In';
-                btn.style.marginTop = '20px';
-                btn.onclick = () => {
-                    sessionStorage.removeItem('redirectedToSignIn');
-                    window.Clerk.redirectToSignIn({
-                        afterSignInUrl: window.location.origin + '/index.html'
-                    });
-                };
-                document.querySelector('.auth-container').appendChild(btn);
-            }
+            window.Clerk.mountSignIn(signInDiv, {
+                afterSignInUrl: window.location.origin + '/index.html',
+                appearance: {
+                    elements: {
+                        footerActionLink: { display: 'none' }
+                    }
+                }
+            });
         });
     </script>
-    
-    <style>
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-    </style>
 </body>
 </html>

@@ -421,14 +421,27 @@ async function initializeAuth() {
     currentUser = clerk.user;
     console.log('Current user:', currentUser.id);
     
+    // Check if user just selected role (prevent loop)
+    const justSelectedRole = sessionStorage.getItem('roleJustSelected');
+    if (justSelectedRole === 'true') {
+        sessionStorage.removeItem('roleJustSelected');
+        console.log('✓ User just selected role, allowing entry');
+    }
+    
     // Get user role from backend
     await loadUserRole();
     
     console.log('Auth initialized. Role:', userRole);
     
     if (!userRole) {
-        console.error('CRITICAL: Role not set after loadUserRole');
-        return false;
+        console.error('CRITICAL: Role still not set after loadUserRole');
+        
+        // Only redirect if they haven't just selected a role
+        if (!justSelectedRole) {
+            console.log('→ Redirecting to role selection');
+            window.location.href = 'role-select.html';
+            return false;
+        }
     }
     
     return true;
@@ -439,10 +452,11 @@ async function loadUserRole() {
     console.log('=== LOAD USER ROLE START ===');
     
     try {
-        // Check localStorage first
+        // FIRST: Check localStorage
         const storedRole = localStorage.getItem('userRole');
         console.log('Stored role in localStorage:', storedRole);
         
+        // SECOND: Check backend
         const token = await getAuthToken();
         console.log('Got auth token:', token ? 'YES' : 'NO');
         
@@ -455,27 +469,30 @@ async function loadUserRole() {
         console.log('Backend /auth/me response:', result);
         
         if (result.success) {
-            // Priority 1: Backend says reviewer
+            // Priority 1: Backend confirms reviewer
             if (result.role === 'reviewer') {
                 userRole = 'reviewer';
                 currentReviewerId = result.data._id;
                 localStorage.setItem('userRole', 'reviewer');
-                console.log('✓ Role set to REVIEWER, ID:', currentReviewerId);
+                console.log('✓ Role set to REVIEWER from backend');
             } 
-            // Priority 2: Backend says owner
+            // Priority 2: Backend confirms owner
             else if (result.role === 'owner') {
                 userRole = 'owner';
                 localStorage.setItem('userRole', 'owner');
-                console.log('✓ Role set to OWNER');
+                console.log('✓ Role set to OWNER from backend');
             }
-            // Priority 3: Use stored role
+            // Priority 3: No backend role, use localStorage
             else if (storedRole) {
                 userRole = storedRole;
                 console.log('✓ Using stored role:', storedRole);
             }
-            // Priority 4: No role - go to selection
+            // Priority 4: No role anywhere - must select
             else {
-                console.log('No role detected - redirecting to role selection');
+                console.log('⚠️ No role found - redirecting to role selection');
+                // Clear any stale data
+                localStorage.clear();
+                sessionStorage.clear();
                 window.location.href = 'role-select.html';
                 return;
             }
@@ -483,8 +500,10 @@ async function loadUserRole() {
         
         console.log('=== FINAL ROLE:', userRole, '===');
         
-        // Update UI immediately
-        updateUIForRole();
+        // IMMEDIATELY update UI
+        if (userRole) {
+            updateUIForRole();
+        }
         
     } catch (error) {
         console.error('Error in loadUserRole:', error);
@@ -493,10 +512,12 @@ async function loadUserRole() {
         const storedRole = localStorage.getItem('userRole');
         if (storedRole) {
             userRole = storedRole;
-            console.log('Using stored role after error:', storedRole);
+            console.log('✓ Using stored role after error:', storedRole);
             updateUIForRole();
         } else {
-            console.error('No stored role - redirecting to role selection');
+            console.error('❌ No stored role - redirecting to role selection');
+            localStorage.clear();
+            sessionStorage.clear();
             window.location.href = 'role-select.html';
         }
     }

@@ -62,21 +62,38 @@
             console.log('User authenticated:', window.Clerk.user.id);
 
             // Role selection handlers
-           window.selectRole = function(role) {
-                console.log('Role selected:', role);
-                
-                // Store role preference in localStorage
-                localStorage.setItem('userRole', role);
-                console.log('Role saved to localStorage:', role);
-                
-                if (role === 'owner') {
-                    console.log('Redirecting to index.html');
-                    window.location.href = 'index.html';
-                } else if (role === 'reviewer') {
-                    console.log('Redirecting to create-reviewer.html');
-                    window.location.href = 'create-reviewer.html';
-                }
-            };
+        window.selectRole = async function(role) {
+    console.log('=== ROLE SELECTED:', role, '===');
+    
+    try {
+        // Save role to localStorage FIRST
+        localStorage.setItem('userRole', role);
+        console.log('✓ Role saved to localStorage');
+        
+        // Set sessionStorage flag to prevent redirect loop
+        sessionStorage.setItem('roleJustSelected', 'true');
+        
+        if (role === 'owner') {
+            console.log('→ Redirecting to index.html (owner dashboard)');
+            
+            // Small delay to ensure storage is written
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            window.location.href = 'index.html';
+            
+        } else if (role === 'reviewer') {
+            console.log('→ Redirecting to create-reviewer.html');
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            window.location.href = 'create-reviewer.html';
+        }
+        
+    } catch (error) {
+        console.error('Error selecting role:', error);
+        alert('Error selecting role. Please try again.');
+    }
+};
             
             console.log('Role selection ready');
         });
