@@ -163,6 +163,7 @@ const API_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:3000/api'
     : 'https://helpmarq-backend.onrender.com/api';
 
+
 // State
 let currentProjectForApplication = null;
 
@@ -1707,22 +1708,24 @@ if (filterType) {
     });
 }
 
-// === ENHANCED SEARCH ===
+// Enhanced search with debouncing
 const searchProjects = document.getElementById('searchProjects');
 
 if (searchProjects) {
     let searchTimeout;
-    
+    let currentSearch = '';
+
     searchProjects.addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
         
+        const searchTerm = e.target.value.toLowerCase().trim();
+        currentSearch = searchTerm;
+
         // Debounce search
-        searchTimeout = setTimeout(() => {
-            const searchTerm = e.target.value.toLowerCase().trim();
-            
+        searchTimeout = setTimeout(async () => {
             if (searchTerm.length === 0) {
-                // Reset to current filters
-                loadProjects(currentProjectsFilters, 1);
+                // Reset to all projects
+                await loadProjects(currentProjectsFilters, 1);
                 return;
             }
 
@@ -1730,31 +1733,51 @@ if (searchProjects) {
                 return; // Wait for at least 2 characters
             }
 
-            // Search in loaded projects first (instant feedback)
-            const cards = document.querySelectorAll('.project-card');
-            let visibleCount = 0;
+            // Show loading
+            projectsGrid.innerHTML = '<div class="loading">Searching...</div>';
 
-            cards.forEach(card => {
-                const title = card.querySelector('h3').textContent.toLowerCase();
-                const desc = card.querySelector('.project-desc').textContent.toLowerCase();
-                const owner = card.querySelector('.project-owner')?.textContent.toLowerCase() || '';
+            try {
+                // Fetch all projects (or implement backend search)
+                const result = await safeFetch(`${API_URL}/projects`, {}, null, false);
 
-                if (title.includes(searchTerm) || desc.includes(searchTerm) || owner.includes(searchTerm)) {
-                    card.style.display = 'block';
-                    visibleCount++;
-                } else {
-                    card.style.display = 'none';
+                if (result.success) {
+                    // Filter client-side
+                    const filtered = result.data.filter(project => {
+                        const title = project.title.toLowerCase();
+                        const desc = project.description.toLowerCase();
+                        const owner = project.ownerName.toLowerCase();
+                        const type = project.type.toLowerCase();
+
+                        return title.includes(searchTerm) || 
+                               desc.includes(searchTerm) || 
+                               owner.includes(searchTerm) ||
+                               type.includes(searchTerm);
+                    });
+
+                    displayProjects(filtered);
+                    
+                    // Update pagination
+                    document.getElementById('projectsPagination').innerHTML = 
+                        `<span class="pagination-info">Found ${filtered.length} project${filtered.length !== 1 ? 's' : ''}</span>`;
                 }
-            });
-
-            // Show "no results" if needed
-            if (visibleCount === 0) {
-                projectsGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">No projects found</div><div class="empty-message">Try different search terms</div></div>';
+            } catch (error) {
+                console.error('Search error:', error);
+                projectsGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Search failed</div></div>';
             }
         }, 300); // 300ms debounce
     });
-}
 
+    // Clear search button
+    const clearSearchBtn = document.createElement('button');
+    clearSearchBtn.className = 'btn-secondary btn-small';
+    clearSearchBtn.textContent = '✕';
+    clearSearchBtn.style.marginLeft = '8px';
+    clearSearchBtn.onclick = () => {
+        searchProjects.value = '';
+        loadProjects(currentProjectsFilters, 1);
+    };
+    searchProjects.parentElement.appendChild(clearSearchBtn);
+}
 // Sort projects
 const sortProjects = document.getElementById('sortProjects');
 const filterMinXP = document.getElementById('filterMinXP');

@@ -61,7 +61,7 @@
     </div>
 
     <script type="module">
-        import { authClient } from './lib/auth.js';
+        import { signUp } from './lib/auth.js';
 
         const form = document.getElementById('signupForm');
         const message = document.getElementById('message');
@@ -79,15 +79,7 @@
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
 
-                const result = await authClient.signUp.email({
-                    email,
-                    password,
-                    name
-                });
-
-                if (result.error) {
-                    throw new Error(result.error.message || 'Signup failed');
-                }
+                await signUp(name, email, password);
 
                 // Success - redirect to role selection
                 window.location.href = 'role-select.html';

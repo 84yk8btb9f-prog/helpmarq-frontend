@@ -32,134 +32,34 @@
         </div>
     </div>
 
-    <script 
-        async 
-        crossorigin="anonymous" 
-        data-clerk-publishable-key="pk_test_Y29ycmVjdC1zdGlua2J1Zy05OS5jbGVyay5hY2NvdW50cy5kZXYk"
-        onload="window.Clerk.load()"
-        src="https://cdn.jsdelivr.net/npm/@clerk/clerk-js@4/dist/clerk.browser.js"
-    ></script>
+    <script type="module">
+        import { getCurrentUser } from './lib/auth.js';
 
-    <script>
         window.addEventListener('load', async () => {
-            console.log('Role select page loaded');
-            
-            if (!window.Clerk) {
-                console.error('Clerk failed to load');
-                alert('Authentication system failed to load. Please refresh the page.');
-                return;
-            }
-            
-            await window.Clerk.load();
-            console.log('Clerk loaded');
-            
-            if (!window.Clerk.user) {
-                console.log('No user found, redirecting to login');
+            const user = await getCurrentUser();
+            if (!user) {
                 window.location.href = 'login.html';
                 return;
             }
 
-            console.log('User authenticated:', window.Clerk.user.id);
-
-            // Role selection handlers
-        window.selectRole = async function(role) {
-    console.log('=== ROLE SELECTED:', role, '===');
-    
-    try {
-        // Save role to localStorage FIRST
-        localStorage.setItem('userRole', role);
-        console.log('✓ Role saved to localStorage');
-        
-        // Set sessionStorage flag to prevent redirect loop
-        sessionStorage.setItem('roleJustSelected', 'true');
-        
-        if (role === 'owner') {
-            console.log('→ Redirecting to index.html (owner dashboard)');
-            
-            // Small delay to ensure storage is written
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            window.location.href = 'index.html';
-            
-        } else if (role === 'reviewer') {
-            console.log('→ Redirecting to create-reviewer.html');
-            
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            window.location.href = 'create-reviewer.html';
-        }
-        
-    } catch (error) {
-        console.error('Error selecting role:', error);
-        alert('Error selecting role. Please try again.');
-    }
-};
-            
-            console.log('Role selection ready');
-        });
-    </script>
-    <script>
-    window.addEventListener('load', async () => {
-        console.log('=== ROLE SELECT PAGE LOADED ===');
-        
-        if (!window.Clerk) {
-            alert('Authentication failed to load. Please refresh.');
-            return;
-        }
-        
-        await window.Clerk.load();
-        
-        if (!window.Clerk.user) {
-            console.log('No user, redirecting to login');
-            window.location.href = 'login.html';
-            return;
-        }
-
-        console.log('✓ User authenticated:', window.Clerk.user.id);
-
-        // CRITICAL: Check if role already exists
-        const existingRole = localStorage.getItem('userRole');
-        if (existingRole) {
-            console.log('⚠️ Role already exists:', existingRole, '- redirecting to app');
-            window.location.href = 'index.html';
-            return;
-        }
-
-        // Role selection handlers
-        window.selectRole = function(role) {
-            console.log('=== ROLE SELECTED:', role, '===');
-            
-            // TRIPLE-SAVE to ensure persistence
-            localStorage.setItem('userRole', role);
-            sessionStorage.setItem('userRole', role);
-            sessionStorage.setItem('roleJustSelected', 'true');
-            
-            // Verify it saved
-            const saved = localStorage.getItem('userRole');
-            console.log('✓ Role saved and verified:', saved);
-            
-            if (saved !== role) {
-                alert('Failed to save role. Please try again.');
+            // Check if role already exists
+            const existingRole = localStorage.getItem('userRole');
+            if (existingRole) {
+                window.location.href = 'index.html';
                 return;
             }
+        });
+
+        window.selectRole = function(role) {
+            localStorage.setItem('userRole', role);
+            sessionStorage.setItem('roleJustSelected', 'true');
             
-            // Redirect based on role
             if (role === 'owner') {
-                console.log('→ Redirecting to index.html');
-                setTimeout(() => {
-                    window.location.replace('index.html'); // Use replace to prevent back button issues
-                }, 200);
-                
-            } else if (role === 'reviewer') {
-                console.log('→ Redirecting to create-reviewer.html');
-                setTimeout(() => {
-                    window.location.replace('create-reviewer.html');
-                }, 200);
+                window.location.href = 'index.html';
+            } else {
+                window.location.href = 'create-reviewer.html';
             }
         };
-        
-        console.log('Role selection ready');
-    });
-</script>
+    </script>
 </body>
 </html>

@@ -49,7 +49,7 @@
     </div>
 
     <script type="module">
-        import { authClient } from './lib/auth.js';
+        import { signIn } from './lib/auth.js';
 
         const form = document.getElementById('loginForm');
         const message = document.getElementById('message');
@@ -66,17 +66,15 @@
                 const email = document.getElementById('email').value;
                 const password = document.getElementById('password').value;
 
-                const result = await authClient.signIn.email({
-                    email,
-                    password
-                });
+                await signIn(email, password);
 
-                if (result.error) {
-                    throw new Error(result.error.message || 'Login failed');
+                // Success - redirect to role selection or index
+                const hasRole = localStorage.getItem('userRole');
+                if (hasRole) {
+                    window.location.href = 'index.html';
+                } else {
+                    window.location.href = 'role-select.html';
                 }
-
-                // Success - redirect
-                window.location.href = 'index.html';
                 
             } catch (error) {
                 message.textContent = '❌ ' + error.message;

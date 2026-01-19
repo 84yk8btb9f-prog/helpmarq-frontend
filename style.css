@@ -2473,4 +2473,147 @@ body:has([class*="cl-modal"]) {
         gap: 4px;
     }
 }
+/* === CRITICAL MOBILE FIXES === */
+
+/* Prevent horizontal scroll */
+html, body {
+    overflow-x: hidden;
+    max-width: 100vw;
+}
+
+.container {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Fix project cards on mobile */
+@media (max-width: 768px) {
+    .projects-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .project-card {
+        margin-bottom: var(--space-3);
+    }
+
+    /* Wrap long URLs */
+    .project-link {
+        word-break: break-all;
+        overflow-wrap: break-word;
+    }
+
+    /* Stack buttons vertically */
+    .project-actions {
+        flex-direction: column;
+    }
+
+    .project-actions button {
+        width: 100%;
+    }
+
+    /* Fix header on mobile */
+    .header-content {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    /* Fix filters */
+    .filters {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .search-input,
+    .filter-select {
+        width: 100%;
+    }
+
+    /* Fix modals */
+    .modal-content {
+        width: 95vw;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+
+    /* Fix tabs */
+    .tab-nav {
+        flex-wrap: wrap;
+    }
+
+    .tab-btn {
+        flex: 1 1 45%;
+        min-width: 120px;
+    }
+
+    /* Fix stats bar */
+    .stats-bar {
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--space-1);
+    }
+
+    .stat {
+        padding: var(--space-2);
+    }
+
+    .stat-value {
+        font-size: 20px;
+    }
+
+    /* Fix dashboard */
+    .dashboard-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    /* Larger touch targets */
+    button,
+    .tab-btn,
+    input[type="submit"],
+    .rating-btn {
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    /* Prevent iOS zoom on input focus */
+    input,
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    /* Fix notification badges */
+    .notification-badge {
+        font-size: 10px;
+        padding: 2px 4px;
+    }
+}
+
+/* Extra small devices */
+@media (max-width: 375px) {
+    body {
+        padding: var(--space-1);
+    }
+
+    .header h1 {
+        font-size: 24px;
+    }
+
+    .section {
+        padding: var(--space-2);
+    }
+
+    .stats-bar {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Landscape mode fixes */
+@media (max-width: 768px) and (orientation: landscape) {
+    .modal-content {
+        max-height: 85vh;
+    }
+
+    .header {
+        padding: var(--space-2);
+    }
+}
 /* === END OF BRAND-ALIGNED STYLES === */

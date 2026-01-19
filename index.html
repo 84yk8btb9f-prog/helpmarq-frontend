@@ -16,7 +16,7 @@
                     <p class="tagline">Expert insights. Accessible pricing.</p>
                 </div>
                 <div style="display: flex; gap: 1rem; align-items: center;">
-                    <div id="userInfo" style="display: flex; align-items: center; gap: 0.5rem;">
+                    <div id="userInfo">
                         <span id="userName" style="font-weight: 600;"></span>
                     </div>
                     <button onclick="handleSignOut()" class="btn-danger btn-small">Sign Out</button>
@@ -48,57 +48,462 @@
             <button class="tab-btn" data-tab="dashboard">My Dashboard</button>
             <button class="tab-btn" data-tab="reviewers">Top Reviewers</button>
         </nav>
+<!-- Tab: Browse Projects -->
+        <div id="projects-tab" class="tab-content active">
+            <section class="section">
+                <div class="section-header">
+                    <h2>Available Projects</h2>
+                    <div class="filters">
+                        <input 
+                            type="text" 
+                            id="searchProjects" 
+                            placeholder="Search projects..." 
+                            class="search-input"
+                        >
+                        <select id="filterType" class="filter-select">
+                            <option value="">All Types</option>
+                            <option value="website">Website</option>
+                            <option value="app">Mobile App</option>
+                            <option value="design">Design</option>
+                            <option value="pitch">Pitch Deck</option>
+                            <option value="business">Business Idea</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <select id="filterMinXP" class="filter-select">
+                            <option value="">All XP</option>
+                            <option value="100">100+ XP</option>
+                            <option value="200">200+ XP</option>
+                            <option value="300">300+ XP</option>
+                        </select>
+                        <select id="sortProjects" class="filter-select">
+                            <option value="newest">Newest First</option>
+                            <option value="oldest">Oldest First</option>
+                            <option value="highestXP">Highest XP</option>
+                            <option value="lowestXP">Lowest XP</option>
+                            <option value="mostApplicants">Most Applicants</option>
+                        </select>
+                        <button id="refreshBtn" class="btn-secondary">↻ Refresh</button>
+                    </div>
+                </div>
 
-        <!-- Rest of your tabs... same as before -->
-        <!-- ... -->
+                <div id="projectsGrid" class="projects-grid">
+                    <div class="loading">Loading projects</div>
+                </div>
+
+                <div id="projectsPagination" class="pagination"></div>
+            </section>
+        </div>
+
+        <!-- Tab: Upload Project -->
+        <div id="upload-tab" class="tab-content">
+            <section class="section">
+                <h2>Upload New Project</h2>
+                <p class="section-subtitle">Get verified, multi-perspective feedback delivered in 48 hours</p>
+                
+                <form id="uploadForm" class="upload-form">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="title">Project Title *</label>
+                            <input 
+                                type="text" 
+                                id="title" 
+                                placeholder="e.g., My SaaS Landing Page"
+                                required
+                            >
+                            <small>Minimum 5 characters</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="type">Project Type *</label>
+                            <select id="type" required>
+                                <option value="">Select type...</option>
+                                <option value="website">Website</option>
+                                <option value="app">Mobile App</option>
+                                <option value="design">Design/Portfolio</option>
+                                <option value="pitch">Pitch Deck</option>
+                                <option value="business">Business Idea</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">Description *</label>
+                        <textarea 
+                            id="description" 
+                            rows="4" 
+                            placeholder="Describe what feedback you're looking for..."
+                            required
+                        ></textarea>
+                        <small>Minimum 20 characters</small>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="link">Project Link *</label>
+                            <input 
+                                type="url" 
+                                id="link" 
+                                placeholder="https://example.com"
+                                required
+                            >
+                        </div>
+
+                        
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="xpReward">XP Reward *</label>
+                            <input 
+                                type="number" 
+                                id="xpReward" 
+                                min="50" 
+                                max="500" 
+                                placeholder="100"
+                                required
+                            >
+                            <small>Between 50 and 500 XP</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="deadline">Review Deadline *</label>
+                            <input 
+                                type="datetime-local" 
+                                id="deadline" 
+                                required
+                            >
+                            <small>When feedback should be delivered</small>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="submitBtn">
+                        Upload Project
+                    </button>
+                </form>
+
+                <div id="uploadMessage" class="message"></div>
+            </section>
+        </div>
+
+        <!-- Tab: Apply as Reviewer -->
+        <div id="apply-tab" class="tab-content">
+            <section class="section">
+                <h2>Apply as Reviewer</h2>
+                <p class="section-subtitle">Build credibility while earning income. Complete structured reviews on your schedule.</p>
+                
+                <!-- Create Reviewer Profile First -->
+                <div id="reviewerSetup" class="reviewer-setup">
+                    <h3>Create Your Reviewer Profile</h3>
+                    <form id="reviewerForm" class="form">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="reviewerUsername">Username *</label>
+                                <input 
+                                    type="text" 
+                                    id="reviewerUsername" 
+                                    placeholder="e.g., DesignerMike"
+                                    required
+                                >
+                            </div>
+
+                            <div class="form-group">
+                                <label for="reviewerEmail">Email *</label>
+                                <input 
+                                    type="email" 
+                                    id="reviewerEmail" 
+                                    placeholder="your@email.com"
+                                    required
+                                >
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="reviewerBio">Bio (Optional)</label>
+                            <textarea 
+                                id="reviewerBio" 
+                                rows="3" 
+                                placeholder="Tell us about your experience..."
+                            ></textarea>
+                        </div>
+
+                        <button type="submit" class="btn-primary">Create Profile</button>
+                    </form>
+                </div>
+
+                <!-- Application Form (shown after profile created) -->
+                <div id="applicationSection" class="application-section" style="display: none;">
+                    <h3>Select a Project to Review</h3>
+                    <div id="applyProjectsList" class="apply-projects-list">
+                        <div class="loading">Loading available projects...</div>
+                    </div>
+                </div>
+
+                <div id="applyMessage" class="message"></div>
+            </section>
+        </div>
+
+        <!-- Tab: Top Reviewers -->
+        <div id="reviewers-tab" class="tab-content">
+            <section class="section">
+                <h2>Top Reviewers</h2>
+                <p class="section-subtitle">Verified experts delivering multi-perspective feedback</p>
+                <div id="reviewersList" class="reviewers-list">
+                    <div class="loading">Loading reviewers...</div>
+                </div>
+            </section>
+        </div>
+<!-- Tab: My Dashboard (Owner/Reviewer) -->
+        <div id="dashboard-tab" class="tab-content">
+            <section class="section">
+                <h2 id="dashboardTitle">My Dashboard</h2>
+                
+                <!-- Owner Dashboard -->
+                <div id="ownerDashboard" style="display: none;">
+                    <div class="dashboard-stats">
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">📊</div>
+                            <div class="stat-value" id="ownerTotalProjects">0</div>
+                            <div class="stat-label">Your Projects</div>
+                        </div>
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">📋</div>
+                            <div class="stat-value" id="ownerTotalApplicants">0</div>
+                            <div class="stat-label">Total Applicants</div>
+                        </div>
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">💬</div>
+                            <div class="stat-value" id="ownerTotalFeedback">0</div>
+                            <div class="stat-label">Total Reviews</div>
+                        </div>
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">⚠️</div>
+                            <div class="stat-value" id="ownerPendingActions">0</div>
+                            <div class="stat-label">Pending Actions</div>
+                        </div>
+                    </div>
+                    
+                    <h3 style="margin-top: 2rem; margin-bottom: 1rem;">Your Projects</h3>
+                    <div id="ownerProjectsList" class="projects-grid">
+                        <div class="loading">Loading your projects</div>
+                    </div>
+                </div>
+                
+                <!-- Reviewer Dashboard -->
+                <div id="reviewerDashboard" style="display: none;">
+                    <div class="dashboard-stats">
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">🏆</div>
+                            <div class="stat-value" id="reviewerLevel">1</div>
+                            <div class="stat-label">Level</div>
+                        </div>
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">⭐</div>
+                            <div class="stat-value" id="reviewerXP">0</div>
+                            <div class="stat-label">Total XP</div>
+                        </div>
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">📝</div>
+                            <div class="stat-value" id="reviewerTotalReviews">0</div>
+                            <div class="stat-label">Reviews Completed</div>
+                        </div>
+                        <div class="dashboard-stat-card">
+                            <div class="stat-icon">⭐</div>
+                            <div class="stat-value" id="reviewerAvgRating">0.0</div>
+                            <div class="stat-label">Avg Rating</div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin: 2rem 0;">
+                        <h3 style="margin-bottom: 1rem;">XP Progress to Next Level</h3>
+                        <div class="xp-progress-bar">
+                            <div id="xpProgressFill" class="xp-progress-fill"></div>
+                        </div>
+                        <p id="xpProgressText" style="text-align: center; margin-top: 0.5rem; color: var(--neutral-mid);"></p>
+                    </div>
+                    
+                    <h3 style="margin-bottom: 1rem;">Your Applications</h3>
+                    <div id="reviewerApplicationsList">
+                        <div class="loading">Loading your applications</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+        <!-- Application Modal -->
+        <div id="applicationModal" class="modal">
+            <div class="modal-content">
+                <span class="modal-close">&times;</span>
+                <h2>Apply to Review Project</h2>
+                <div id="modalProjectInfo" class="modal-project-info"></div>
+                
+                <form id="applicationForm" class="form">
+                    <div class="form-group">
+                        <label for="qualifications">Why are you qualified? *</label>
+                        <textarea 
+                            id="qualifications" 
+                            rows="4" 
+                            placeholder="Explain your relevant experience and expertise..."
+                            required
+                        ></textarea>
+                        <small>Minimum 20 characters</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="focusAreas">What will you focus on? *</label>
+                        <textarea 
+                            id="focusAreas" 
+                            rows="4" 
+                            placeholder="Describe what aspects you'll review..."
+                            required
+                        ></textarea>
+                        <small>Minimum 20 characters</small>
+                    </div>
+
+                    <div class="nda-section">
+                        <div class="nda-box">
+                            <h4>Non-Disclosure Agreement (NDA)</h4>
+                            <div class="nda-content">
+                                <p><strong>By submitting this application, you agree to:</strong></p>
+                                <ul>
+                                    <li>Keep all project materials, ideas, and information strictly confidential</li>
+                                    <li>Not share, copy, or distribute any project content without explicit permission</li>
+                                    <li>Use project information solely for the purpose of providing feedback</li>
+                                    <li>Delete all project materials after completing your review</li>
+                                    <li>Not use any project ideas or concepts for your own commercial purposes</li>
+                                </ul>
+                                <p style="margin-top: 1rem;"><strong>Violation of this agreement may result in:</strong></p>
+                                <ul>
+                                    <li>Immediate account suspension</li>
+                                    <li>Legal action for breach of confidentiality</li>
+                                    <li>Loss of all earned XP and payments</li>
+                                </ul>
+                            </div>
+                            <label class="nda-checkbox">
+                                <input type="checkbox" id="ndaAccept" required>
+                                <span>I have read and agree to the Non-Disclosure Agreement *</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-primary" id="submitApplicationBtn">Submit Application</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Applicants Modal (for project owners) -->
+        <div id="applicantsModal" class="modal">
+            <div class="modal-content modal-large">
+                <span class="modal-close applicants-close">&times;</span>
+                <h2>Project Applicants</h2>
+                <div id="applicantsList" class="applicants-list">
+                    <div class="loading">Loading applicants...</div>
+                </div>
+            </div>
+        </div>
+        <!-- Feedback Modal (for approved reviewers) -->
+<div id="feedbackModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close feedback-close">&times;</span>
+        <h2>Submit Feedback</h2>
+        <div id="feedbackProjectInfo" class="modal-project-info"></div>
+        
+        <form id="feedbackForm" class="form">
+            <div class="form-group">
+                <label for="feedbackText">Your Feedback *</label>
+                <textarea 
+                    id="feedbackText" 
+                    rows="8" 
+                    placeholder="Provide detailed, constructive feedback..."
+                    required
+                ></textarea>
+                <small>Minimum 50 characters</small>
+            </div>
+
+            <div class="form-group">
+                <label for="projectRating">Rate This Project (Optional)</label>
+                <select id="projectRating">
+                    <option value="">No rating</option>
+                    <option value="5">★★★★★ Excellent</option>
+                    <option value="4">★★★★☆ Good</option>
+                    <option value="3">★★★☆☆ Average</option>
+                    <option value="2">★★☆☆☆ Below Average</option>
+                    <option value="1">★☆☆☆☆ Poor</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn-primary" id="submitFeedbackBtn">Submit Feedback</button>
+        </form>
+    </div>
+</div>
+
+<!-- Feedback List Modal (for project owners) -->
+<div id="feedbackListModal" class="modal">
+    <div class="modal-content modal-large">
+        <span class="modal-close feedback-list-close">&times;</span>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3);">
+            <h2 style="margin: 0;">Project Feedback</h2>
+            <button class="btn-secondary btn-small" onclick="downloadFeedback()" id="downloadFeedbackBtn">
+                📥 Download All
+            </button>
+        </div>
+        <div id="feedbackList" class="feedback-list">
+            <div class="loading">Loading feedback</div>
+        </div>
+    </div>
+</div>
+    </div>
     </div>
 
+    <!-- BETTER AUTH ONLY - NO CLERK -->
     <script type="module">
-        import { authClient, getCurrentUser } from './lib/auth.js';
+        import { getCurrentUser, isAuthenticated, signOut } from './lib/auth.js';
 
         window.addEventListener('load', async () => {
-            console.log('=== INDEX PAGE LOAD START ===');
+            console.log('=== INDEX PAGE LOADING ===');
             
-            // Check authentication
-            const user = await getCurrentUser();
-            if (!user) {
-                console.log('Not authenticated, redirecting to login');
-                window.location.href = 'login.html';
-                return;
-            }
-            
-            console.log('✓ User authenticated:', user.id);
-
-            // Display user name
-            document.getElementById('userName').textContent = user.name || user.email;
-
-            // Set global user
-            window.currentUser = user;
-
-            // Sign out handler
-            window.handleSignOut = async () => {
-                console.log('Sign out triggered');
-                try {
-                    await authClient.signOut();
-                    localStorage.clear();
-                    sessionStorage.clear();
+            try {
+                // Check authentication
+                const authenticated = await isAuthenticated();
+                
+                if (!authenticated) {
+                    console.log('Not authenticated - redirecting to login');
                     window.location.href = 'login.html';
-                } catch (error) {
-                    console.error('Sign out error:', error);
-                    // Force redirect anyway
-                    localStorage.clear();
-                    window.location.href = 'login.html';
+                    return;
                 }
-            };
-
-            // Load main app
-            console.log('Loading app.js...');
-            const script = document.createElement('script');
-            script.src = 'app.js';
-            script.type = 'module';
-            script.onload = () => console.log('app.js loaded successfully');
-            script.onerror = () => console.error('Failed to load app.js');
-            document.body.appendChild(script);
+                
+                const user = await getCurrentUser();
+                console.log('✓ User authenticated:', user.id);
+                
+                // Display user name
+                const userNameEl = document.getElementById('userName');
+                if (userNameEl && user) {
+                    userNameEl.textContent = user.name || user.email;
+                }
+                
+                // Set global user
+                window.currentUser = user;
+                
+                // Sign out handler
+                window.handleSignOut = async () => {
+                    console.log('Signing out...');
+                    await signOut();
+                    window.location.href = 'login.html';
+                };
+                
+                // Load main app
+                const script = document.createElement('script');
+                script.src = 'app.js';
+                script.type = 'module';
+                script.onload = () => console.log('✓ App loaded');
+                script.onerror = () => {
+                    console.error('Failed to load app');
+                    alert('Failed to load application. Please refresh.');
+                };
+                document.body.appendChild(script);
+                
+            } catch (error) {
+                console.error('Initialization error:', error);
+                alert('Authentication failed. Redirecting to login...');
+                window.location.href = 'login.html';
+            }
         });
     </script>
 </body>

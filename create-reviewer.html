@@ -88,9 +88,9 @@
     <script type="module">
         import { authClient, getCurrentUser } from './lib/auth.js';
 
-        const API_URL = window.location.hostname === 'localhost' 
-            ? 'http://localhost:3000/api'
-            : 'https://helpmarq-backend.onrender.com/api';
+        const API_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:3000/api'
+    : 'https://helpmarq-backend.onrender.com/api';
         
         window.addEventListener('load', async () => {
             console.log('=== REVIEWER CREATION PAGE LOADED ===');
