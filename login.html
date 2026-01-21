@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelpMarq - Login</title>
+    <title>Login - HelpMarq</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -63,18 +63,25 @@
             message.style.display = 'none';
             
             try {
-                const email = document.getElementById('email').value;
+                const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
 
                 await signIn(email, password);
 
-                // Success - redirect to role selection or index
+                message.textContent = '✅ Login successful! Redirecting...';
+                message.className = 'message success';
+                message.style.display = 'block';
+
+                // Check if user has a role
                 const hasRole = localStorage.getItem('userRole');
-                if (hasRole) {
-                    window.location.href = 'index.html';
-                } else {
-                    window.location.href = 'role-select.html';
-                }
+                
+                setTimeout(() => {
+                    if (hasRole) {
+                        window.location.href = 'index.html';
+                    } else {
+                        window.location.href = 'role-select.html';
+                    }
+                }, 1500);
                 
             } catch (error) {
                 message.textContent = '❌ ' + error.message;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HelpMarq - Create Reviewer Profile</title>
+    <title>Create Reviewer Profile - HelpMarq</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -78,7 +78,7 @@
                     <small id="bioCounter">0 / 50 characters</small>
                 </div>
 
-                <button type="submit" class="btn-primary" id="submitBtn">Create Reviewer Profile</button>
+                <button type="submit" class="btn-primary" id="submitBtn">Create Profile</button>
             </form>
 
             <div id="message" class="message"></div>
@@ -86,23 +86,18 @@
     </div>
 
     <script type="module">
-        import { authClient, getCurrentUser } from './lib/auth.js';
+        import { getCurrentUser, getSession } from './lib/auth.js';
 
         const API_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:3000/api'
-    : 'https://helpmarq-backend.onrender.com/api';
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
         
         window.addEventListener('load', async () => {
-            console.log('=== REVIEWER CREATION PAGE LOADED ===');
-            
-            // Check authentication
             const user = await getCurrentUser();
             if (!user) {
                 window.location.href = 'login.html';
                 return;
             }
-
-            console.log('✓ User authenticated:', user.id);
 
             // Bio counter
             const bioField = document.getElementById('bio');
@@ -119,7 +114,6 @@
             
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                console.log('=== FORM SUBMISSION STARTED ===');
                 
                 const submitBtn = document.getElementById('submitBtn');
                 const message = document.getElementById('message');
@@ -135,8 +129,7 @@
                     const portfolio = document.getElementById('portfolio').value.trim();
                     const bio = document.getElementById('bio').value.trim();
                     
-                    // Frontend validation
-                    if (!username || username.length < 3) {
+                    if (username.length < 3) {
                         throw new Error('Display name must be at least 3 characters');
                     }
                     
@@ -148,14 +141,11 @@
                         throw new Error('Please select your experience level');
                     }
                     
-                    if (!bio || bio.length < 50) {
+                    if (bio.length < 50) {
                         throw new Error('Bio must be at least 50 characters');
                     }
                     
-                    console.log('✓ Frontend validation passed');
-                    
-                    // Get session token
-                    const session = await authClient.getSession();
+                    const session = await getSession();
                     if (!session) {
                         throw new Error('Session expired. Please log in again.');
                     }
@@ -169,10 +159,9 @@
                         bio
                     };
                     
-                    console.log('Sending to server:', formData);
-                    
                     const response = await fetch(`${API_URL}/auth/create-reviewer`, {
                         method: 'POST',
+                        credentials: 'include',
                         headers: {
                             'Content-Type': 'application/json',
                             'Authorization': `Bearer ${session.session.token}`
@@ -183,11 +172,9 @@
                     const result = await response.json();
                     
                     if (!response.ok || !result.success) {
-                        throw new Error(result.error || `Server error: ${response.status}`);
+                        throw new Error(result.error || 'Failed to create profile');
                     }
                     
-                    // Success!
-                    console.log('=== SUCCESS ===');
                     message.textContent = '✅ Profile created! Redirecting...';
                     message.className = 'message success';
                     message.style.display = 'block';
@@ -200,14 +187,12 @@
                     }, 1500);
                     
                 } catch (error) {
-                    console.error('=== ERROR ===', error);
-                    
                     message.textContent = '❌ ' + error.message;
                     message.className = 'message error';
                     message.style.display = 'block';
                     
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Create Reviewer Profile';
+                    submitBtn.textContent = 'Create Profile';
                 }
             });
         });
