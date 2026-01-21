@@ -43,7 +43,7 @@ async function initialize() {
 // Load user role from backend
 async function loadUserRole() {
     console.log('=== LOADING USER ROLE ===');
-    
+
     try {
         // Check localStorage first
         const storedRole = localStorage.getItem('userRole');
@@ -51,24 +51,24 @@ async function loadUserRole() {
             userRole = storedRole;
             console.log('✓ Role from localStorage:', userRole);
         }
-        
+
         // Verify with backend
         const session = await getSession();
         if (!session) {
             console.error('No session found');
             return;
         }
-        
-        const response = await fetch(`${API_URL}/auth/me`, {
+
+        const response = await fetch(`${API_URL}/user/me`, {
             credentials: 'include',
             headers: {
                 'Authorization': `Bearer ${session.session.token}`,
                 'Content-Type': 'application/json'
             }
         });
-        
+
         const result = await response.json();
-        
+
         if (result.success) {
             if (result.role === 'reviewer') {
                 userRole = 'reviewer';
@@ -81,7 +81,7 @@ async function loadUserRole() {
                 console.log('✓ Backend confirmed: OWNER');
             }
         }
-        
+
     } catch (error) {
         console.error('Error loading role:', error);
     }
