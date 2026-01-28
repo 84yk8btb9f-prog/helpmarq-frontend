@@ -13,13 +13,13 @@
                 <h1>Create Reviewer Profile</h1>
                 <p class="tagline">Set up your profile to start reviewing</p>
             </div>
-            
+
             <form id="reviewerProfileForm" class="form">
                 <div class="form-group">
                     <label for="username">Display Name *</label>
-                    <input 
-                        type="text" 
-                        id="username" 
+                    <input
+                        type="text"
+                        id="username"
                         placeholder="e.g., Sarah Martinez"
                         required
                         minlength="3"
@@ -58,18 +58,18 @@
 
                 <div class="form-group">
                     <label for="portfolio">Portfolio / LinkedIn URL (Optional)</label>
-                    <input 
-                        type="url" 
-                        id="portfolio" 
+                    <input
+                        type="url"
+                        id="portfolio"
                         placeholder="https://..."
                     >
                 </div>
 
                 <div class="form-group">
                     <label for="bio">About You *</label>
-                    <textarea 
-                        id="bio" 
-                        rows="4" 
+                    <textarea
+                        id="bio"
+                        rows="4"
                         placeholder="Tell us about your background (minimum 50 characters)..."
                         required
                         minlength="50"
@@ -91,7 +91,7 @@
         const API_URL = window.location.hostname === 'localhost'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
-        
+
         window.addEventListener('load', async () => {
             const user = await getCurrentUser();
             if (!user) {
@@ -102,7 +102,7 @@
             // Bio counter
             const bioField = document.getElementById('bio');
             const bioCounter = document.getElementById('bioCounter');
-            
+
             bioField.addEventListener('input', () => {
                 const length = bioField.value.length;
                 bioCounter.textContent = `${length} / 50 characters`;
@@ -111,45 +111,45 @@
 
             // Form submission
             const form = document.getElementById('reviewerProfileForm');
-            
+
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
-                
+
                 const submitBtn = document.getElementById('submitBtn');
                 const message = document.getElementById('message');
-                
+
                 submitBtn.disabled = true;
                 submitBtn.textContent = 'Creating Profile...';
                 message.style.display = 'none';
-                
+
                 try {
                     const username = document.getElementById('username').value.trim();
                     const expertise = document.getElementById('expertise').value;
                     const experience = document.getElementById('experience').value;
                     const portfolio = document.getElementById('portfolio').value.trim();
                     const bio = document.getElementById('bio').value.trim();
-                    
+
                     if (username.length < 3) {
                         throw new Error('Display name must be at least 3 characters');
                     }
-                    
+
                     if (!expertise) {
                         throw new Error('Please select your expertise');
                     }
-                    
+
                     if (!experience) {
                         throw new Error('Please select your experience level');
                     }
-                    
+
                     if (bio.length < 50) {
                         throw new Error('Bio must be at least 50 characters');
                     }
-                    
+
                     const session = await getSession();
                     if (!session) {
                         throw new Error('Session expired. Please log in again.');
                     }
-                    
+
                     const formData = {
                         username,
                         email: user.email,
@@ -158,39 +158,55 @@
                         portfolio: portfolio || '',
                         bio
                     };
-                    
-                    const response = await fetch(`${API_URL}/auth/create-reviewer`, {
+
+                    console.log('Submitting reviewer profile to:', `${API_URL}/user/create-reviewer`);
+                    console.log('Form data:', formData);
+
+                    const response = await fetch(`${API_URL}/user/create-reviewer`, {
                         method: 'POST',
                         credentials: 'include',
                         headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${session.session.token}`
+                            'Content-Type': 'application/json'
                         },
                         body: JSON.stringify(formData)
                     });
-                    
+
                     const result = await response.json();
-                    
+                    console.log('Create reviewer result:', result);
+
                     if (!response.ok || !result.success) {
                         throw new Error(result.error || 'Failed to create profile');
                     }
-                    
+                    try {
+    const welcomeResponse = await fetch(`${API_URL}/send-welcome-email`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, name: username })
+    });
+    const welcomeResult = await welcomeResponse.json();
+    console.log('Welcome email result:', welcomeResult);
+} catch (emailError) {
+    console.log('Welcome email error (non-blocking):', emailError);
+}
+
                     message.textContent = '✅ Profile created! Redirecting...';
                     message.className = 'message success';
                     message.style.display = 'block';
-                    
+
                     localStorage.setItem('userRole', 'reviewer');
                     sessionStorage.setItem('roleJustSelected', 'true');
-                    
+
                     setTimeout(() => {
                         window.location.href = 'index.html';
                     }, 1500);
-                    
+
                 } catch (error) {
+                    console.error('Create reviewer error:', error);
                     message.textContent = '❌ ' + error.message;
                     message.className = 'message error';
                     message.style.display = 'block';
-                    
+
                     submitBtn.disabled = false;
                     submitBtn.textContent = 'Create Profile';
                 }

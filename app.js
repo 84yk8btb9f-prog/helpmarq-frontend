@@ -1,179 +1,230 @@
 // Main application logic
-import { getCurrentUser, getSession, signOut } from './lib/auth.js';
+import { getCurrentUser, signOut } from './lib/auth.js';
 import { getCached, setCache, clearCache } from './lib/cache.js';
 
 const API_URL = window.location.hostname === 'localhost'
     ? 'http://localhost:3000/api'
     : 'https://helpmarq-backend.onrender.com/api';
 
+// ✅ ADD: Helper function for null-safe descriptions
+function safeDescription(description, maxLength = 120) {
+    if (!description) return 'No description available';
+    if (description.length <= maxLength) return description;
+    return description.substring(0, maxLength) + '...';
+}
+
 // Global state
 let currentUser = null;
 let userRole = null;
 let currentReviewerId = null;
-let currentProjectForApplication = null;
-let currentProjectForFeedback = null;
 
 // Initialize
 async function initialize() {
-    console.log('=== INITIALIZING APP ===');
-    
-    currentUser = await getCurrentUser();
-    if (!currentUser) {
-        window.location.href = 'login.html';
-        return;
-    }
-    
-    await loadUserRole();
-    
-    if (!userRole) {
-        const justSelected = sessionStorage.getItem('roleJustSelected');
-        if (!justSelected) {
-            window.location.href = 'role-select.html';
-            return;
-        }
-    }
-    
-    updateUIForRole();
-    setupEventListeners();
-    loadInitialData();
-    
-    console.log('✓ App initialized');
-}
-
-// Load user role from backend
-async function loadUserRole() {
-    console.log('=== LOADING USER ROLE ===');
+    console.log('=== APP INITIALIZATION START ===');
 
     try {
-        // Check localStorage first
-        const storedRole = localStorage.getItem('userRole');
-        if (storedRole) {
-            userRole = storedRole;
-            console.log('✓ Role from localStorage:', userRole);
+        // 1. Check authentication
+        currentUser = await getCurrentUser();
+        if (!currentUser) {
+            console.log('❌ No user - redirecting to login');
+            window.location.href = 'login.html';
+            return;
         }
+        console.log('✓ User authenticated:', currentUser.id);
 
-        // Verify with backend
-        const session = await getSession();
-        if (!session) {
-            console.error('No session found');
+        // 2. Load and verify role
+        await loadAndVerifyRole();
+        
+        // ✅ FIX: Check if we were redirected
+        if (!userRole) {
+            console.log('No role set, stopping initialization');
             return;
         }
 
+        // 3. Update UI
+        updateUIForRole();
+
+        // 4. Setup event listeners
+        setupEventListeners();
+
+        // 5. Load initial tab
+        loadInitialTab();
+
+        console.log('=== APP INITIALIZATION COMPLETE ===');
+
+    } catch (error) {
+        console.error('❌ Initialization error:', error);
+        if (!error.message?.includes('redirect')) {
+            showError('Failed to initialize. Please refresh the page.');
+        }
+    }
+}
+
+// Load and verify user role
+async function loadAndVerifyRole() {
+    console.log('=== LOADING ROLE ===');
+
+    try {
+        // First check: Backend (source of truth)
         const response = await fetch(`${API_URL}/user/me`, {
             credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
         const result = await response.json();
+        console.log('Backend role response:', result);
 
         if (result.success) {
             if (result.role === 'reviewer') {
                 userRole = 'reviewer';
                 currentReviewerId = result.data._id;
                 localStorage.setItem('userRole', 'reviewer');
-                console.log('✓ Backend confirmed: REVIEWER');
+                localStorage.setItem('reviewerId', result.data._id);
+                console.log('✓ REVIEWER role from backend');
+                return;
+                
             } else if (result.role === 'owner') {
                 userRole = 'owner';
                 localStorage.setItem('userRole', 'owner');
-                console.log('✓ Backend confirmed: OWNER');
+                console.log('✓ OWNER role from backend');
+                return;
+                
+            } else if (result.role === null) {
+                // ✅ FIX: User verified email but hasn't chosen role yet
+                console.log('→ User verified but no role chosen yet');
+                
+                // Check if we just came from email verification
+                const justVerified = sessionStorage.getItem('justVerified');
+                if (justVerified) {
+                    sessionStorage.removeItem('justVerified');
+                    window.location.href = 'role-select.html';
+                    return;
+                }
+                
+                // Check localStorage as fallback
+                const storedRole = localStorage.getItem('userRole');
+                if (storedRole) {
+                    console.log('Using stored role:', storedRole);
+                    userRole = storedRole;
+                    if (storedRole === 'reviewer') {
+                        currentReviewerId = localStorage.getItem('reviewerId');
+                    }
+                    return;
+                }
+                
+                // No role anywhere - go to role selection
+                console.log('Redirecting to role-select');
+                window.location.href = 'role-select.html';
+                return;
             }
         }
-
+        
     } catch (error) {
-        console.error('Error loading role:', error);
+        console.error('Role load error:', error);
+        
+        // ✅ FIX: Better fallback logic
+        const storedRole = localStorage.getItem('userRole');
+        if (storedRole) {
+            console.log('Backend failed, using stored role:', storedRole);
+            userRole = storedRole;
+            if (storedRole === 'reviewer') {
+                currentReviewerId = localStorage.getItem('reviewerId');
+            }
+            return;
+        }
+        
+        // No role, no localStorage - send to role selection
+        console.log('No role found anywhere, redirecting to role-select');
+        window.location.href = 'role-select.html';
     }
 }
 
 // Update UI based on role
 function updateUIForRole() {
     console.log('=== UPDATING UI FOR ROLE:', userRole, '===');
-    
+
     const uploadTabBtn = document.getElementById('uploadTabBtn');
     const applyTabBtn = document.getElementById('applyTabBtn');
-    
+
     if (userRole === 'reviewer') {
-        if (uploadTabBtn) uploadTabBtn.remove();
+        if (uploadTabBtn) uploadTabBtn.style.display = 'none';
         if (applyTabBtn) applyTabBtn.style.display = 'inline-block';
     } else if (userRole === 'owner') {
-        if (applyTabBtn) applyTabBtn.remove();
+        if (applyTabBtn) applyTabBtn.style.display = 'none';
         if (uploadTabBtn) uploadTabBtn.style.display = 'inline-block';
     }
+
+    console.log('✓ UI updated for role');
 }
 
 // Setup event listeners
 function setupEventListeners() {
+    console.log('=== SETTING UP EVENT LISTENERS ===');
+    
+    // Sign out button
+    const signOutBtn = document.getElementById('signOutBtn');
+    if (signOutBtn) {
+        signOutBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            console.log('Signing out...');
+            await signOut();
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = 'login.html';
+        });
+    }
+
     // Tab navigation
     const tabBtns = document.querySelectorAll('.tab-btn');
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const targetTab = btn.dataset.tab;
+    console.log('Found tab buttons:', tabBtns.length);
+    
+    tabBtns.forEach((btn, index) => {
+        console.log(`Tab ${index}:`, btn.dataset.tab, btn.textContent.trim());
+        
+        const newBtn = btn.cloneNode(true);
+        btn.parentNode.replaceChild(newBtn, btn);
+        
+        newBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
             
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            const targetTab = this.dataset.tab;
+            console.log('🖱️ TAB CLICKED:', targetTab);
             
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById(`${targetTab}-tab`).classList.add('active');
-            
-            // Load data for specific tabs
-            if (targetTab === 'dashboard') {
-                loadDashboard();
-            } else if (targetTab === 'projects') {
-                loadProjects();
-            } else if (targetTab === 'reviewers') {
-                loadReviewers();
-            } else if (targetTab === 'apply') {
-                loadProjectsForApplication();
+            if (!targetTab) {
+                console.error('No data-tab attribute found');
+                return;
             }
+            
+            switchTab(targetTab);
         });
     });
-    
+
     // Upload form
     const uploadForm = document.getElementById('uploadForm');
     if (uploadForm) {
         uploadForm.addEventListener('submit', handleUploadProject);
     }
-    
-    // Application form
-    const applicationForm = document.getElementById('applicationForm');
-    if (applicationForm) {
-        applicationForm.addEventListener('submit', handleSubmitApplication);
-    }
-    
-    // Feedback form
-    const feedbackForm = document.getElementById('feedbackForm');
-    if (feedbackForm) {
-        feedbackForm.addEventListener('submit', handleSubmitFeedback);
-    }
-    
+
     // Filters
     const filterType = document.getElementById('filterType');
     const sortProjects = document.getElementById('sortProjects');
     const searchProjects = document.getElementById('searchProjects');
     const refreshBtn = document.getElementById('refreshBtn');
-    
-    if (filterType) {
-        filterType.addEventListener('change', () => loadProjects());
-    }
-    
-    if (sortProjects) {
-        sortProjects.addEventListener('change', () => loadProjects());
-    }
-    
+
+    if (filterType) filterType.addEventListener('change', () => loadProjects());
+    if (sortProjects) sortProjects.addEventListener('change', () => loadProjects());
     if (searchProjects) {
         let searchTimeout;
-        searchProjects.addEventListener('input', (e) => {
+        searchProjects.addEventListener('input', () => {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(() => {
-                loadProjects();
-            }, 300);
+            searchTimeout = setTimeout(() => loadProjects(), 300);
         });
     }
-    
     if (refreshBtn) {
         refreshBtn.addEventListener('click', () => {
             clearCache();
@@ -182,92 +233,596 @@ function setupEventListeners() {
             updateStats();
         });
     }
-    
-    // Modal close buttons
+
+    // Modals
     document.querySelectorAll('.modal-close').forEach(btn => {
         btn.addEventListener('click', closeModals);
     });
-    
-    // Close modals on outside click
+
     window.addEventListener('click', (e) => {
         if (e.target.classList.contains('modal')) {
             closeModals();
         }
     });
+    
+    console.log('✓ Event listeners set up successfully');
 }
 
-// Load initial data
-function loadInitialData() {
-    loadProjects();
-    loadReviewers();
+// Switch tab
+function switchTab(targetTab) {
+    console.log('===> SWITCHING TO TAB:', targetTab);
+
+    const allBtns = document.querySelectorAll('.tab-btn');
+    allBtns.forEach(btn => {
+        btn.classList.remove('active');
+    });
+
+    const targetBtn = document.querySelector(`[data-tab="${targetTab}"]`);
+    if (targetBtn) {
+        targetBtn.classList.add('active');
+    }
+
+    const allContent = document.querySelectorAll('.tab-content');
+    allContent.forEach(content => {
+        content.classList.remove('active');
+    });
+
+    const targetContent = document.getElementById(`${targetTab}-tab`);
+    if (targetContent) {
+        targetContent.classList.add('active');
+    }
+
+    console.log('Loading data for tab:', targetTab);
+    switch(targetTab) {
+        case 'dashboard':
+            loadDashboard();
+            break;
+        case 'projects':
+            loadProjects();
+            break;
+        case 'reviewers':
+            loadReviewers();
+            break;
+        case 'apply':
+            loadProjectsForApplication();
+            break;
+        case 'upload':
+            console.log('Upload tab - static content');
+            break;
+        default:
+            console.warn('Unknown tab:', targetTab);
+    }
+    
+    console.log('✓ Tab switch complete');
+}
+
+// Load initial tab
+function loadInitialTab() {
+    console.log('=== LOADING INITIAL TAB ===');
+    switchTab('projects');
     updateStats();
+    loadReviewers();
+}
+
+// Load dashboard
+async function loadDashboard() {
+    console.log('Loading dashboard for role:', userRole);
+    
+    if (userRole === 'owner') {
+        document.getElementById('ownerDashboard').style.display = 'block';
+        document.getElementById('reviewerDashboard').style.display = 'none';
+        await loadOwnerDashboard();
+    } else if (userRole === 'reviewer') {
+        document.getElementById('ownerDashboard').style.display = 'none';
+        document.getElementById('reviewerDashboard').style.display = 'block';
+        await loadReviewerDashboard();
+    }
+}
+
+// Load owner dashboard
+async function loadOwnerDashboard() {
+    console.log('=== LOADING OWNER DASHBOARD ===');
+    
+    try {
+        const ownerDash = document.getElementById('ownerDashboard');
+        const reviewerDash = document.getElementById('reviewerDashboard');
+        
+        if (ownerDash) ownerDash.style.display = 'block';
+        if (reviewerDash) reviewerDash.style.display = 'none';
+        
+        const response = await fetch(`${API_URL}/projects`, { 
+            credentials: 'include' 
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        console.log('All projects:', result.data?.length || 0);
+
+        if (!result.success) throw new Error(result.error);
+
+        const userProjects = (result.data || []).filter(p => p.ownerId === currentUser.id);
+        console.log('User projects:', userProjects.length);
+
+        const stats = {
+            totalProjects: userProjects.length,
+            totalApplicants: userProjects.reduce((sum, p) => sum + (p.applicantsCount || 0), 0),
+            totalFeedback: userProjects.reduce((sum, p) => sum + (p.reviewsCount || 0), 0)
+        };
+        
+        console.log('Stats:', stats);
+
+        const updateStat = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = value;
+            }
+        };
+        
+        updateStat('ownerTotalProjects', stats.totalProjects);
+        updateStat('ownerTotalApplicants', stats.totalApplicants);
+        updateStat('ownerTotalFeedback', stats.totalFeedback);
+
+        const projectsList = document.getElementById('ownerProjectsList');
+        if (projectsList) {
+            if (userProjects.length === 0) {
+                projectsList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">📦</div>
+                        <div class="empty-title">No projects yet</div>
+                        <div class="empty-message">Upload your first project to get started!</div>
+                    </div>
+                `;
+            } else {
+                displayProjects(userProjects, 'ownerProjectsList');
+            }
+        }
+        
+        console.log('✓ Owner dashboard loaded');
+        
+    } catch (error) {
+        console.error('❌ Load owner dashboard error:', error);
+        showError('Failed to load dashboard: ' + error.message);
+    }
+}
+
+// ✅ FIXED: Load reviewer dashboard with past reviews
+async function loadReviewerDashboard() {
+    if (!currentReviewerId) {
+        console.log('No reviewer ID - loading from backend');
+        await loadAndVerifyRole();
+        if (!currentReviewerId) {
+            document.getElementById('reviewerDashboard').innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">Loading...</div></div>';
+            return;
+        }
+    }
+
+    try {
+        // Get reviewer stats
+        const response = await fetch(`${API_URL}/reviewers/${currentReviewerId}`, { 
+            credentials: 'include' 
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            const reviewer = result.data;
+
+            document.getElementById('reviewerLevel').textContent = reviewer.level;
+            document.getElementById('reviewerXP').textContent = reviewer.xp;
+            document.getElementById('reviewerTotalReviews').textContent = reviewer.totalReviews;
+            document.getElementById('reviewerAvgRating').textContent = reviewer.averageRating.toFixed(1);
+
+            const levelThresholds = [0, 500, 1000, 1500, 2000, 2500];
+            const currentLevelMin = levelThresholds[reviewer.level - 1] || 0;
+            const nextLevelMin = levelThresholds[reviewer.level] || 2500;
+            const progressPercent = ((reviewer.xp - currentLevelMin) / (nextLevelMin - currentLevelMin)) * 100;
+
+            document.getElementById('xpProgressFill').style.width = `${Math.min(progressPercent, 100)}%`;
+
+            const xpNeeded = nextLevelMin - reviewer.xp;
+            document.getElementById('xpProgressText').textContent = xpNeeded > 0 ? `${xpNeeded} XP to Level ${reviewer.level + 1}` : 'Max level!';
+        }
+
+        // ✅ NEW: Load past reviews
+        const feedbackResponse = await fetch(`${API_URL}/feedback/reviewer/${currentReviewerId}`, {
+            credentials: 'include'
+        });
+        const feedbackResult = await feedbackResponse.json();
+
+        const reviewsList = document.getElementById('reviewerApplicationsList');
+        if (reviewsList) {
+            if (feedbackResult.success && feedbackResult.data.length > 0) {
+                reviewsList.innerHTML = '<h3 style="margin-bottom: 1rem;">Your Past Reviews</h3>';
+                
+                feedbackResult.data.forEach(feedback => {
+                    const card = document.createElement('div');
+                    card.className = 'feedback-card';
+                    card.style.marginBottom = '1rem';
+                    
+                    const project = feedback.projectId;
+                    const date = new Date(feedback.submittedAt).toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric'
+                    });
+                    
+                    card.innerHTML = `
+                        <h4 style="margin-bottom: 0.5rem;">${escapeHtml(project?.title || 'Project')}</h4>
+                        <p style="color: var(--neutral-mid); font-size: 14px; margin-bottom: 1rem;">
+                            ${date} • ${project?.type || 'Unknown type'}
+                        </p>
+                        <div style="background: var(--neutral-light); padding: 12px; border-radius: 8px; margin-bottom: 1rem;">
+                            <p style="color: var(--neutral-mid); margin: 0; font-size: 14px;">
+                                ${escapeHtml(safeDescription(feedback.feedbackText, 150))}
+                            </p>
+                        </div>
+                        ${feedback.isRated ? `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <strong style="color: var(--neutral-dark);">Rating:</strong>
+                                    <span style="color: #F59E0B; font-size: 18px; margin-left: 8px;">
+                                        ${'★'.repeat(feedback.ownerRating)}${'☆'.repeat(5 - feedback.ownerRating)}
+                                    </span>
+                                </div>
+                                <div style="text-align: right;">
+                                    <span style="color: var(--success-green); font-weight: 700; font-size: 18px;">
+                                        +${feedback.xpAwarded} XP
+                                    </span>
+                                </div>
+                            </div>
+                        ` : `
+                            <p style="color: var(--warning-orange); font-size: 14px; margin: 0;">
+                                ⏳ Awaiting rating from owner
+                            </p>
+                        `}
+                    `;
+                    
+                    reviewsList.appendChild(card);
+                });
+            } else {
+                reviewsList.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">💬</div>
+                        <div class="empty-title">No reviews yet</div>
+                        <div class="empty-message">Apply to projects and submit reviews to build your portfolio!</div>
+                    </div>
+                `;
+            }
+        }
+
+    } catch (error) {
+        console.error('Load reviewer dashboard error:', error);
+    }
 }
 
 // Load projects
 async function loadProjects() {
     try {
         const projectsGrid = document.getElementById('projectsGrid');
-        projectsGrid.innerHTML = '<div class="loading">Loading projects</div>';
-        
+        projectsGrid.innerHTML = '<div class="loading">Loading projects...</div>';
+
         const filters = {};
-        
         const typeFilter = document.getElementById('filterType');
-        if (typeFilter && typeFilter.value) {
-            filters.type = typeFilter.value;
-        }
-        
+        if (typeFilter?.value) filters.type = typeFilter.value;
+
         const sortFilter = document.getElementById('sortProjects');
-        if (sortFilter && sortFilter.value) {
-            filters.sort = sortFilter.value;
-        }
-        
+        if (sortFilter?.value) filters.sort = sortFilter.value;
+
         const searchInput = document.getElementById('searchProjects');
-        if (searchInput && searchInput.value) {
-            filters.search = searchInput.value;
+        if (searchInput?.value) filters.search = searchInput.value;
+
+        const params = new URLSearchParams(filters);
+        const response = await fetch(`${API_URL}/projects?${params.toString()}`, { 
+            credentials: 'include' 
+        });
+        const result = await response.json();
+
+        if (!result.success) throw new Error(result.error);
+
+        let projectsToShow = result.data;
+        
+        if (userRole === 'owner') {
+            projectsToShow = result.data.filter(p => p.ownerId === currentUser.id);
+        } else if (userRole === 'reviewer') {
+            projectsToShow = result.data.filter(p => {
+                const isOpen = new Date(p.deadline) > new Date();
+                const notOwn = p.ownerId !== currentUser.id;
+                return isOpen && notOwn;
+            });
+        }
+
+        displayProjects(projectsToShow, 'projectsGrid');
+
+    } catch (error) {
+        console.error('Load projects error:', error);
+        document.getElementById('projectsGrid').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading projects</div></div>';
+    }
+}
+
+// ✅ FIXED: Open applicants modal with reviewer profile
+window.openApplicantsModal = async function(projectId) {
+    console.log('Opening applicants modal for project:', projectId);
+    
+    try {
+        const modal = document.getElementById('applicantsModal');
+        const applicantsList = document.getElementById('applicantsList');
+        
+        if (!modal || !applicantsList) {
+            console.error('Modal elements not found');
+            return;
         }
         
-        const params = new URLSearchParams(filters);
-        const url = `${API_URL}/projects?${params.toString()}`;
+        modal.dataset.projectId = projectId;
+        applicantsList.innerHTML = '<div class="loading">Loading applicants...</div>';
+        modal.classList.add('active');
         
-        const response = await fetch(url);
+        const response = await fetch(`${API_URL}/applications/project/${projectId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
         const result = await response.json();
+        console.log('Applicants response:', result);
         
         if (!result.success) {
             throw new Error(result.error);
         }
         
-        displayProjects(result.data);
+        const applications = result.data;
+        
+        if (applications.length === 0) {
+            applicantsList.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No applicants yet</div><div class="empty-message">Reviewers will see your project and can apply to review it.</div></div>';
+            return;
+        }
+        
+        applicantsList.innerHTML = '';
+        
+        applications.forEach(app => {
+            const card = document.createElement('div');
+            card.className = 'applicant-card';
+            
+            const reviewerInfo = app.reviewerId || {};
+            const reviewerLevel = reviewerInfo.level || '?';
+            const reviewerXP = reviewerInfo.xp || 0;
+            const reviewerRating = reviewerInfo.averageRating || 0;
+            const reviewerReviews = reviewerInfo.totalReviews || 0;
+            
+            let statusBadge = '';
+            let actions = '';
+            
+            if (app.status === 'pending') {
+                statusBadge = '<span class="status-badge pending">⏳ Pending</span>';
+                actions = `
+                    <div class="applicant-actions">
+                        <button class="btn-success btn-small" onclick="window.approveApplication('${app._id}')">
+                            ✓ Approve
+                        </button>
+                        <button class="btn-danger btn-small" onclick="window.rejectApplication('${app._id}')">
+                            ✗ Reject
+                        </button>
+                        <button class="btn-secondary btn-small" onclick="window.viewReviewerProfile('${app.reviewerId._id}')">
+                            👤 View Full Profile
+                        </button>
+                    </div>
+                `;
+            } else if (app.status === 'approved') {
+                statusBadge = '<span class="status-badge approved">✓ Approved</span>';
+                actions = `
+                    <button class="btn-secondary btn-small" onclick="window.viewReviewerProfile('${app.reviewerId._id}')">
+                        👤 View Full Profile
+                    </button>
+                `;
+            } else {
+                statusBadge = '<span class="status-badge rejected">✗ Rejected</span>';
+            }
+            
+            card.innerHTML = `
+                <div class="applicant-header">
+                    <div>
+                        <h4 style="cursor: pointer; color: var(--primary-blue);" onclick="window.viewReviewerProfile('${app.reviewerId._id}')">
+                            ${escapeHtml(app.reviewerUsername)} ↗
+                        </h4>
+                        <p style="color: var(--neutral-mid); font-size: 14px; margin: 4px 0;">
+                            Level ${reviewerLevel} • ${reviewerXP} XP • ${reviewerReviews} reviews • ${reviewerRating > 0 ? reviewerRating.toFixed(1) + '★' : 'Not rated yet'}
+                        </p>
+                    </div>
+                    ${statusBadge}
+                </div>
+                
+                <div style="background: var(--neutral-light); padding: 16px; border-radius: 8px; margin: 16px 0;">
+                    <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">Qualifications:</strong>
+                    <p style="color: var(--neutral-mid); margin: 0; line-height: 1.6;">${escapeHtml(app.qualifications)}</p>
+                </div>
+                
+                <div style="background: var(--neutral-light); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">Focus Areas:</strong>
+                    <p style="color: var(--neutral-mid); margin: 0; line-height: 1.6;">${escapeHtml(app.focusAreas)}</p>
+                </div>
+                
+                <p style="color: var(--neutral-mid); font-size: 13px;">
+                    Applied ${new Date(app.appliedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                </p>
+                
+                ${actions}
+            `;
+            
+            applicantsList.appendChild(card);
+        });
+        
+        console.log('✓ Applicants modal loaded');
         
     } catch (error) {
-        console.error('Load projects error:', error);
-        document.getElementById('projectsGrid').innerHTML = 
-            '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading projects</div></div>';
+        console.error('Load applicants error:', error);
+        const applicantsList = document.getElementById('applicantsList');
+        if (applicantsList) {
+            applicantsList.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading applicants</div><div class="empty-message">' + escapeHtml(error.message) + '</div></div>';
+        }
     }
-}
+};
 
-// Display projects
-function displayProjects(projects) {
-    const projectsGrid = document.getElementById('projectsGrid');
+// ✅ FIXED: View reviewer full profile
+window.viewReviewerProfile = async function(reviewerId) {
+    console.log('Viewing reviewer profile:', reviewerId);
     
+    try {
+        const modal = document.getElementById('reviewerProfileModal');
+        const content = document.getElementById('reviewerProfileContent');
+        
+        if (!modal || !content) {
+            console.error('Reviewer profile modal not found');
+            return;
+        }
+        
+        content.innerHTML = '<div class="loading">Loading profile...</div>';
+        modal.classList.add('active');
+        
+        const response = await fetch(`${API_URL}/reviewers/${reviewerId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        
+        const reviewer = result.data;
+        
+        content.innerHTML = `
+            <div style="background: linear-gradient(135deg, #2563EB 0%, #8B5CF6 100%); color: white; padding: 32px; border-radius: 12px; margin-bottom: 24px; text-align: center;">
+                <h3 style="margin: 0 0 8px 0; font-size: 28px; color: white;">${escapeHtml(reviewer.username)}</h3>
+                <p style="margin: 0; opacity: 0.9;">Level ${reviewer.level} Reviewer</p>
+                <div style="display: flex; justify-content: center; gap: 32px; margin-top: 24px;">
+                    <div>
+                        <div style="font-size: 32px; font-weight: 700;">${reviewer.xp}</div>
+                        <div style="opacity: 0.9; font-size: 14px;">XP</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: 700;">${reviewer.totalReviews}</div>
+                        <div style="opacity: 0.9; font-size: 14px;">Reviews</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 32px; font-weight: 700;">${reviewer.averageRating.toFixed(1)}★</div>
+                        <div style="opacity: 0.9; font-size: 14px;">Rating</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">📧 Email:</strong>
+                <p style="margin: 0; color: var(--neutral-mid);">${escapeHtml(reviewer.email)}</p>
+            </div>
+            
+            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">💼 Expertise:</strong>
+                <p style="margin: 0; color: var(--neutral-mid);">${escapeHtml(reviewer.expertise)}</p>
+            </div>
+            
+            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">⏱️ Experience:</strong>
+                <p style="margin: 0; color: var(--neutral-mid);">${escapeHtml(reviewer.experience)} years</p>
+            </div>
+            
+            ${reviewer.portfolio ? `
+                <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                    <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">🔗 Portfolio:</strong>
+                    <a href="${escapeHtml(reviewer.portfolio)}" target="_blank" style="color: var(--primary-blue);">${escapeHtml(reviewer.portfolio)}</a>
+                </div>
+            ` : ''}
+            
+            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
+                <strong style="display: block; margin-bottom: 12px; color: var(--neutral-dark);">📝 Bio:</strong>
+                <p style="margin: 0; color: var(--neutral-mid); line-height: 1.6;">${escapeHtml(reviewer.bio)}</p>
+            </div>
+        `;
+        
+    } catch (error) {
+        console.error('View reviewer profile error:', error);
+        const content = document.getElementById('reviewerProfileContent');
+        if (content) {
+            content.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading profile</div></div>`;
+        }
+    }
+};
+
+// Approve application
+window.approveApplication = async function(applicationId) {
+    try {
+        const response = await fetch(`${API_URL}/applications/${applicationId}/approve`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) throw new Error(result.error);
+        
+        showSuccess('Application approved! Reviewer notified.');
+        
+        const modal = document.getElementById('applicantsModal');
+        const projectId = modal.dataset.projectId;
+        if (projectId) {
+            await openApplicantsModal(projectId);
+        }
+        
+    } catch (error) {
+        showError(error.message);
+    }
+};
+
+// Reject application
+window.rejectApplication = async function(applicationId) {
+    if (!confirm('Reject this application?')) return;
+    
+    try {
+        const response = await fetch(`${API_URL}/applications/${applicationId}/reject`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const result = await response.json();
+        
+        if (!result.success) throw new Error(result.error);
+        
+        showSuccess('Application rejected.');
+        
+        const modal = document.getElementById('applicantsModal');
+        const projectId = modal.dataset.projectId;
+        if (projectId) {
+            await openApplicantsModal(projectId);
+        }
+        
+    } catch (error) {
+        showError(error.message);
+    }
+};
+
+// ✅ FIXED: Display projects with null-safe descriptions
+function displayProjects(projects, containerId = 'projectsGrid') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
     if (projects.length === 0) {
-        projectsGrid.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No projects found</div></div>';
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No projects found</div></div>';
         return;
     }
-    
-    projectsGrid.innerHTML = '';
-    
+
+    container.innerHTML = '';
+
     projects.forEach(project => {
         const card = document.createElement('div');
         card.className = 'project-card';
-        
+
         const deadline = new Date(project.deadline);
         const now = new Date();
         const hoursLeft = Math.floor((deadline - now) / (1000 * 60 * 60));
         const daysLeft = Math.floor(hoursLeft / 24);
-        
-        let deadlineText = '';
-        let deadlineColor = '';
-        
+
+        let deadlineText, deadlineColor;
         if (hoursLeft < 0) {
             deadlineText = 'Deadline passed';
             deadlineColor = '#EF4444';
@@ -281,63 +836,62 @@ function displayProjects(projects) {
             deadlineText = `${daysLeft}d left`;
             deadlineColor = '#10B981';
         }
-        
+
         let actionsHTML = '';
         if (userRole === 'owner' && project.ownerId === currentUser.id) {
             actionsHTML = `
                 <div class="project-actions">
-                    <button class="btn-secondary btn-small" onclick="viewApplicants('${project._id}')">
-                        Applicants (${project.applicantsCount})
+                    <button class="btn-secondary btn-small" onclick="window.openApplicantsModal('${project._id}')">
+                        📋 Applicants (${project.applicantsCount})
                     </button>
-                    <button class="btn-secondary btn-small" onclick="viewFeedback('${project._id}')">
-                        Feedback (${project.reviewsCount})
+                    <button class="btn-secondary btn-small" onclick="window.openFeedbackListModal('${project._id}'); document.getElementById('feedbackListModal').dataset.projectId='${project._id}'">
+                        💬 Feedback (${project.reviewsCount})
                     </button>
-                    <button class="btn-danger btn-small" onclick="deleteProject('${project._id}')">Delete</button>
                 </div>
             `;
         }
-        
+
         card.innerHTML = `
             <h3>${escapeHtml(project.title)}</h3>
-            <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
                 <span class="project-badge badge-${project.type}">${project.type}</span>
                 <span class="project-badge" style="background: ${deadlineColor}; color: white;">⏰ ${deadlineText}</span>
+                ${project.reviewersNeeded ? `<span class="project-badge" style="background: #8B5CF6; color: white;">👥 ${project.reviewersNeeded} reviewers</span>` : ''}
             </div>
-            <p class="project-desc">${escapeHtml(project.description)}</p>
-            <a href="${project.link}" target="_blank" class="project-link">🔗 ${project.link}</a>
+            <p class="project-desc">${escapeHtml(safeDescription(project.description, 120))}</p>
+            ${(userRole === 'owner' && project.ownerId === currentUser.id) ? `
+                <a href="${project.link}" target="_blank" class="project-link">🔗 ${project.link}</a>
+            ` : `
+                <p class="project-link" style="color: var(--warning-orange);">🔒 Link visible after approval</p>
+            `}
             <div class="project-meta">
                 <span>By ${escapeHtml(project.ownerName)}</span>
                 <span class="project-xp">+${project.xpReward} XP</span>
             </div>
-            <p class="project-applicants">📋 ${project.applicantsCount} applicants | ✅ ${project.approvedCount} approved</p>
+            <p class="project-applicants">📋 ${project.applicantsCount} applicants | ✅ ${project.approvedCount}/${project.reviewersNeeded || 2} approved</p>
             ${actionsHTML}
         `;
-        
-        projectsGrid.appendChild(card);
+
+        container.appendChild(card);
     });
 }
 
 // Upload project
 async function handleUploadProject(e) {
     e.preventDefault();
-    
+
     const submitBtn = document.getElementById('submitBtn');
     submitBtn.disabled = true;
     submitBtn.textContent = 'Uploading...';
-    
+
     try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired. Please log in again.');
-        }
-        
         const deadlineValue = document.getElementById('deadline').value;
         const deadline = new Date(deadlineValue);
-        
+
         if (deadline <= new Date()) {
             throw new Error('Deadline must be in the future');
         }
-        
+
         const projectData = {
             title: document.getElementById('title').value.trim(),
             description: document.getElementById('description').value.trim(),
@@ -347,31 +901,24 @@ async function handleUploadProject(e) {
             ownerName: currentUser.name || currentUser.email,
             ownerEmail: currentUser.email,
             xpReward: parseInt(document.getElementById('xpReward').value),
+            reviewersNeeded: parseInt(document.getElementById('reviewersNeeded').value),
             deadline: deadline.toISOString()
         };
-        
+
         const response = await fetch(`${API_URL}/projects`, {
             method: 'POST',
             credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(projectData)
         });
-        
+
         const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
+        if (!result.success) throw new Error(result.error);
+
         showSuccess('Project uploaded successfully!');
         document.getElementById('uploadForm').reset();
-        
-        // Switch to projects tab
-        document.querySelector('[data-tab="projects"]').click();
-        
+        switchTab('projects');
+
     } catch (error) {
         showError(error.message);
     } finally {
@@ -383,15 +930,10 @@ async function handleUploadProject(e) {
 // Load reviewers
 async function loadReviewers() {
     try {
-        const response = await fetch(`${API_URL}/reviewers?limit=10`);
+        const response = await fetch(`${API_URL}/reviewers?limit=10`, { credentials: 'include' });
         const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
+        if (!result.success) throw new Error(result.error);
         displayReviewers(result.data);
-        
     } catch (error) {
         console.error('Load reviewers error:', error);
     }
@@ -400,18 +942,18 @@ async function loadReviewers() {
 // Display reviewers
 function displayReviewers(reviewers) {
     const reviewersList = document.getElementById('reviewersList');
-    
+
     if (reviewers.length === 0) {
         reviewersList.innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">No reviewers yet</div></div>';
         return;
     }
-    
+
     reviewersList.innerHTML = '';
-    
+
     reviewers.forEach(reviewer => {
         const card = document.createElement('div');
         card.className = 'reviewer-card';
-        
+
         card.innerHTML = `
             <div class="reviewer-info">
                 <h3>${escapeHtml(reviewer.username)}</h3>
@@ -432,663 +974,17 @@ function displayReviewers(reviewers) {
                 </div>
             </div>
         `;
-        
+
         reviewersList.appendChild(card);
-    });
-}
-
-// Load projects for application (reviewer view)
-async function loadProjectsForApplication() {
-    if (!currentReviewerId) return;
-    
-    try {
-        const applyProjectsList = document.getElementById('applyProjectsList');
-        applyProjectsList.innerHTML = '<div class="loading">Loading projects</div>';
-        
-        const [projectsRes, applicationsRes] = await Promise.all([
-            fetch(`${API_URL}/projects`),
-            fetch(`${API_URL}/applications/reviewer/${currentReviewerId}`, {
-                credentials: 'include'
-            })
-        ]);
-        
-        const projectsResult = await projectsRes.json();
-        const applicationsResult = await applicationsRes.json();
-        
-        if (!projectsResult.success) {
-            throw new Error(projectsResult.error);
-        }
-        
-        const applications = applicationsResult.success ? applicationsResult.data : [];
-        
-        displayProjectsForApplication(projectsResult.data, applications);
-        
-    } catch (error) {
-        console.error('Load projects for application error:', error);
-    }
-}
-
-// Display projects for application
-function displayProjectsForApplication(projects, applications) {
-    const applyProjectsList = document.getElementById('applyProjectsList');
-    
-    if (projects.length === 0) {
-        applyProjectsList.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No projects available</div></div>';
-        return;
-    }
-    
-    applyProjectsList.innerHTML = '';
-    
-    projects.forEach(project => {
-        const card = document.createElement('div');
-        card.className = 'apply-project-card';
-        
-        const application = applications.find(app => app.projectId._id === project._id);
-        
-        let actionButton = '';
-        if (!application) {
-            actionButton = `<button class="btn-primary btn-small" onclick="openApplicationModal('${project._id}', '${escapeHtml(project.title)}', '${project.type}', ${project.xpReward})">Apply Now</button>`;
-        } else if (application.status === 'pending') {
-            actionButton = `<button class="btn-secondary btn-small" disabled>Pending</button>`;
-        } else if (application.status === 'approved') {
-            actionButton = `<button class="btn-success btn-small" onclick="openFeedbackModal('${project._id}', '${escapeHtml(project.title)}')">Submit Feedback</button>`;
-        } else if (application.status === 'rejected') {
-            actionButton = `<button class="btn-danger btn-small" disabled>Rejected</button>`;
-        }
-        
-        card.innerHTML = `
-            <div class="apply-project-info">
-                <h4>${escapeHtml(project.title)}</h4>
-                <p class="apply-project-meta">
-                    <span class="project-badge badge-${project.type}">${project.type}</span>
-                    <span style="color: var(--success-green); font-weight: 600;">+${project.xpReward} XP</span>
-                </p>
-            </div>
-            ${actionButton}
-        `;
-        
-        applyProjectsList.appendChild(card);
-    });
-}
-
-// Open application modal
-window.openApplicationModal = function(projectId, title, type, xpReward) {
-    currentProjectForApplication = projectId;
-    
-    const modalProjectInfo = document.getElementById('modalProjectInfo');
-    modalProjectInfo.innerHTML = `
-        <h3>${title}</h3>
-        <p>
-            <span class="project-badge badge-${type}">${type}</span>
-            <span style="color: var(--success-green); font-weight: 600; margin-left: 0.5rem;">+${xpReward} XP</span>
-        </p>
-    `;
-    
-    document.getElementById('applicationModal').classList.add('active');
-};
-
-// Submit application
-async function handleSubmitApplication(e) {
-    e.preventDefault();
-    
-    if (!currentReviewerId || !currentProjectForApplication) {
-        showError('Missing information');
-        return;
-    }
-    
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const applicationData = {
-            projectId: currentProjectForApplication,
-            reviewerId: currentReviewerId,
-            reviewerUsername: currentUser.name || currentUser.email,
-            qualifications: document.getElementById('qualifications').value.trim(),
-            focusAreas: document.getElementById('focusAreas').value.trim()
-        };
-        
-        const response = await fetch(`${API_URL}/applications`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(applicationData)
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        showSuccess('Application submitted!');
-        document.getElementById('applicationForm').reset();
-        closeModals();
-        loadProjectsForApplication();
-        
-    } catch (error) {
-        showError(error.message);
-    }
-}
-
-// Open feedback modal
-window.openFeedbackModal = function(projectId, projectTitle) {
-    currentProjectForFeedback = projectId;
-    
-    const feedbackProjectInfo = document.getElementById('feedbackProjectInfo');
-    feedbackProjectInfo.innerHTML = `<h3>Reviewing: ${projectTitle}</h3>`;
-    
-    document.getElementById('feedbackModal').classList.add('active');
-};
-
-// Submit feedback
-async function handleSubmitFeedback(e) {
-    e.preventDefault();
-    
-    if (!currentProjectForFeedback || !currentReviewerId) {
-        showError('Missing information');
-        return;
-    }
-    
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const feedbackData = {
-            projectId: currentProjectForFeedback,
-            reviewerId: currentReviewerId,
-            reviewerUsername: currentUser.name || currentUser.email,
-            feedbackText: document.getElementById('feedbackText').value.trim(),
-            projectRating: document.getElementById('projectRating').value ? 
-                parseInt(document.getElementById('projectRating').value) : null
-        };
-        
-        const response = await fetch(`${API_URL}/feedback`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(feedbackData)
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        showSuccess('Feedback submitted!');
-        document.getElementById('feedbackForm').reset();
-        closeModals();
-        loadProjectsForApplication();
-        
-    } catch (error) {
-        showError(error.message);
-    }
-}
-
-// View applicants
-window.viewApplicants = async function(projectId) {
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const applicantsList = document.getElementById('applicantsList');
-        applicantsList.innerHTML = '<div class="loading">Loading applicants</div>';
-        
-        document.getElementById('applicantsModal').classList.add('active');
-        
-        const response = await fetch(`${API_URL}/applications/project/${projectId}`, {
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        displayApplicants(result.data, projectId);
-        
-    } catch (error) {
-        console.error('View applicants error:', error);
-        showError(error.message);
-    }
-};
-
-// Display applicants
-function displayApplicants(applications, projectId) {
-    const applicantsList = document.getElementById('applicantsList');
-    
-    if (applications.length === 0) {
-        applicantsList.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No applicants yet</div></div>';
-        return;
-    }
-    
-    applicantsList.innerHTML = '';
-    
-    applications.forEach(app => {
-        const card = document.createElement('div');
-        card.className = 'applicant-card';
-        
-        const reviewer = app.reviewerId;
-        
-        card.innerHTML = `
-            <div class="applicant-header">
-                <div class="applicant-info">
-                    <h4>${escapeHtml(app.reviewerUsername)}</h4>
-                    <p class="applicant-stats">
-                        Level ${reviewer.level} • ${reviewer.xp} XP • ${reviewer.totalReviews} reviews
-                    </p>
-                </div>
-                <span class="applicant-status status-${app.status}">${app.status}</span>
-            </div>
-            
-            <div class="applicant-text">
-                <h5>Qualifications</h5>
-                <p>${escapeHtml(app.qualifications)}</p>
-            </div>
-            
-            <div class="applicant-text">
-                <h5>Focus Areas</h5>
-                <p>${escapeHtml(app.focusAreas)}</p>
-            </div>
-            
-            ${app.status === 'pending' ? `
-                <div class="applicant-actions">
-                    <button class="btn-success" onclick="approveApplication('${app._id}', '${projectId}')">Approve</button>
-                    <button class="btn-danger" onclick="rejectApplication('${app._id}', '${projectId}')">Reject</button>
-                </div>
-            ` : ''}
-        `;
-        
-        applicantsList.appendChild(card);
-    });
-}
-
-// Approve application
-window.approveApplication = async function(applicationId, projectId) {
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const response = await fetch(`${API_URL}/applications/${applicationId}/approve`, {
-            method: 'PUT',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        showSuccess('Application approved!');
-        viewApplicants(projectId);
-        
-    } catch (error) {
-        showError(error.message);
-    }
-};
-
-// Reject application
-window.rejectApplication = async function(applicationId, projectId) {
-    if (!confirm('Are you sure you want to reject this application?')) {
-        return;
-    }
-    
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const response = await fetch(`${API_URL}/applications/${applicationId}/reject`, {
-            method: 'PUT',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        showSuccess('Application rejected');
-        viewApplicants(projectId);
-        
-    } catch (error) {
-        showError(error.message);
-    }
-};
-
-// View feedback
-window.viewFeedback = async function(projectId) {
-    try {
-        const feedbackList = document.getElementById('feedbackList');
-        feedbackList.innerHTML = '<div class="loading">Loading feedback</div>';
-        
-        document.getElementById('feedbackListModal').classList.add('active');
-        
-        const response = await fetch(`${API_URL}/feedback/project/${projectId}`);
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        displayFeedback(result.data);
-        
-    } catch (error) {
-        console.error('View feedback error:', error);
-        showError(error.message);
-    }
-};
-
-// Display feedback
-function displayFeedback(feedbackList) {
-    const container = document.getElementById('feedbackList');
-    
-    if (feedbackList.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">💬</div><div class="empty-title">No feedback yet</div></div>';
-        return;
-    }
-    
-    container.innerHTML = '';
-    
-    feedbackList.forEach(feedback => {
-        const card = document.createElement('div');
-        card.className = 'feedback-card';
-        
-        let ratingSection = '';
-        if (feedback.isRated) {
-            ratingSection = `
-                <div class="feedback-rating">
-                    <strong>Your Rating:</strong> ${'★'.repeat(feedback.ownerRating)}${'☆'.repeat(5 - feedback.ownerRating)}
-                    <span class="xp-badge">+${feedback.xpAwarded} XP awarded</span>
-                </div>
-            `;
-        } else if (userRole === 'owner') {
-            ratingSection = `
-                <div class="rating-form">
-                    <label>Rate this feedback:</label>
-                    <div class="rating-buttons">
-                        <button class="rating-btn" onclick="rateFeedback('${feedback._id}', 5)">★★★★★</button>
-                        <button class="rating-btn" onclick="rateFeedback('${feedback._id}', 4)">★★★★☆</button>
-                        <button class="rating-btn" onclick="rateFeedback('${feedback._id}', 3)">★★★☆☆</button>
-                        <button class="rating-btn" onclick="rateFeedback('${feedback._id}', 2)">★★☆☆☆</button>
-                        <button class="rating-btn" onclick="rateFeedback('${feedback._id}', 1)">★☆☆☆☆</button>
-                    </div>
-                </div>
-            `;
-        }
-        
-        card.innerHTML = `
-            <div class="feedback-header">
-                <h4>${escapeHtml(feedback.reviewerUsername)}</h4>
-                <span class="feedback-date">${new Date(feedback.submittedAt).toLocaleDateString()}</span>
-            </div>
-            <div class="feedback-text">
-                <p>${escapeHtml(feedback.feedbackText)}</p>
-            </div>
-            ${feedback.projectRating ? `<div class="project-rating">Rated project: ${'★'.repeat(feedback.projectRating)}${'☆'.repeat(5 - feedback.projectRating)}</div>` : ''}
-            ${ratingSection}
-        `;
-        
-        container.appendChild(card);
-    });
-}
-
-// Rate feedback
-window.rateFeedback = async function(feedbackId, rating) {
-    if (!confirm(`Rate this feedback ${rating} stars?`)) {
-        return;
-    }
-    
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const response = await fetch(`${API_URL}/feedback/${feedbackId}/rate`, {
-            method: 'PUT',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ rating })
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        showSuccess(`Rated! Reviewer earned ${result.data.xpAwarded} XP`);
-        
-        // Reload feedback
-        const projectId = result.data.feedback.projectId;
-        viewFeedback(projectId);
-        
-    } catch (error) {
-        showError(error.message);
-    }
-};
-
-// Delete project
-window.deleteProject = async function(projectId) {
-    if (!confirm('Are you sure you want to delete this project?')) {
-        return;
-    }
-    
-    try {
-        const session = await getSession();
-        if (!session) {
-            throw new Error('Session expired');
-        }
-        
-        const response = await fetch(`${API_URL}/projects/${projectId}`, {
-            method: 'DELETE',
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (!result.success) {
-            throw new Error(result.error);
-        }
-        
-        showSuccess('Project deleted');
-        loadProjects();
-        
-    } catch (error) {
-        showError(error.message);
-    }
-};
-
-// Load dashboard
-async function loadDashboard() {
-    if (userRole === 'owner') {
-        document.getElementById('ownerDashboard').style.display = 'block';
-        document.getElementById('reviewerDashboard').style.display = 'none';
-        loadOwnerDashboard();
-    } else if (userRole === 'reviewer') {
-        document.getElementById('ownerDashboard').style.display = 'none';
-        document.getElementById('reviewerDashboard').style.display = 'block';
-        loadReviewerDashboard();
-    }
-}
-
-// Load owner dashboard
-async function loadOwnerDashboard() {
-    try {
-        const session = await getSession();
-        if (!session) return;
-        
-        const response = await fetch(`${API_URL}/projects`, {
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            const userProjects = result.data.filter(p => p.ownerId === currentUser.id);
-            
-            document.getElementById('ownerTotalProjects').textContent = userProjects.length;
-            
-            const totalApplicants = userProjects.reduce((sum, p) => sum + p.applicantsCount, 0);
-            document.getElementById('ownerTotalApplicants').textContent = totalApplicants;
-            
-            const totalFeedback = userProjects.reduce((sum, p) => sum + p.reviewsCount, 0);
-            document.getElementById('ownerTotalFeedback').textContent = totalFeedback;
-            
-            // Display projects
-            const ownerProjectsList = document.getElementById('ownerProjectsList');
-            if (userProjects.length === 0) {
-                ownerProjectsList.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No projects yet</div></div>';
-            } else {
-                displayProjects(userProjects);
-            }
-        }
-        
-    } catch (error) {
-        console.error('Load owner dashboard error:', error);
-    }
-}
-
-// Load reviewer dashboard
-async function loadReviewerDashboard() {
-    if (!currentReviewerId) return;
-    
-    try {
-        const session = await getSession();
-        if (!session) return;
-        
-        const response = await fetch(`${API_URL}/reviewers/${currentReviewerId}`, {
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            const reviewer = result.data;
-            
-            document.getElementById('reviewerLevel').textContent = reviewer.level;
-            document.getElementById('reviewerXP').textContent = reviewer.xp;
-            document.getElementById('reviewerTotalReviews').textContent = reviewer.totalReviews;
-            document.getElementById('reviewerAvgRating').textContent = reviewer.averageRating.toFixed(1);
-            
-            // XP progress
-            const levelThresholds = [0, 500, 1000, 1500, 2000, 2500];
-            const currentLevelMin = levelThresholds[reviewer.level - 1] || 0;
-            const nextLevelMin = levelThresholds[reviewer.level] || 2500;
-            
-            const progressPercent = ((reviewer.xp - currentLevelMin) / (nextLevelMin - currentLevelMin)) * 100;
-            
-            document.getElementById('xpProgressFill').style.width = `${Math.min(progressPercent, 100)}%`;
-            
-            const xpNeeded = nextLevelMin - reviewer.xp;
-            document.getElementById('xpProgressText').textContent = 
-                xpNeeded > 0 ? `${xpNeeded} XP to Level ${reviewer.level + 1}` : 'Max level!';
-        }
-        
-        // Load applications
-        const appsResponse = await fetch(`${API_URL}/applications/reviewer/${currentReviewerId}`, {
-            credentials: 'include',
-            headers: {
-                'Authorization': `Bearer ${session.session.token}`
-            }
-        });
-        
-        const appsResult = await appsResponse.json();
-        
-        if (appsResult.success) {
-            displayReviewerApplications(appsResult.data);
-        }
-        
-    } catch (error) {
-        console.error('Load reviewer dashboard error:', error);
-    }
-}
-
-// Display reviewer applications
-function displayReviewerApplications(applications) {
-    const container = document.getElementById('reviewerApplicationsList');
-    
-    if (applications.length === 0) {
-        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No applications yet</div></div>';
-        return;
-    }
-    
-    container.innerHTML = '';
-    
-    applications.forEach(app => {
-        const card = document.createElement('div');
-        card.className = 'applicant-card';
-        
-        let actionButton = '';
-        if (app.status === 'approved') {
-            actionButton = `<button class="btn-success btn-small" onclick="openFeedbackModal('${app.projectId._id}', '${escapeHtml(app.projectId.title)}')">Submit Feedback</button>`;
-        }
-        
-        card.innerHTML = `
-            <div class="applicant-header">
-                <div>
-                    <h4>${escapeHtml(app.projectId.title)}</h4>
-                    <p style="color: var(--neutral-mid); font-size: 14px;">${app.projectId.type} • ${app.projectId.xpReward} XP</p>
-                </div>
-                <span class="applicant-status status-${app.status}">${app.status}</span>
-            </div>
-            ${actionButton ? `<div style="margin-top: 1rem;">${actionButton}</div>` : ''}
-        `;
-        
-        container.appendChild(card);
     });
 }
 
 // Update stats
 async function updateStats() {
     try {
-        const response = await fetch(`${API_URL}/stats`);
+        const response = await fetch(`${API_URL}/stats`, { credentials: 'include' });
         const result = await response.json();
-        
+
         if (result.success) {
             document.getElementById('totalProjects').textContent = result.data.totals.projects;
             document.getElementById('totalReviewers').textContent = result.data.totals.reviewers;
@@ -1096,6 +992,546 @@ async function updateStats() {
         }
     } catch (error) {
         console.error('Update stats error:', error);
+    }
+}
+
+// ✅ FIXED: Load projects for application with null-safe descriptions and project access
+async function loadProjectsForApplication() {
+    const container = document.getElementById('applyProjectsList');
+    
+    if (!currentReviewerId) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">⭐</div><div class="empty-title">Loading...</div></div>';
+        return;
+    }
+
+    try {
+        container.innerHTML = '<div class="loading">Loading projects...</div>';
+
+        // Get reviewer's applications
+        const appsResponse = await fetch(`${API_URL}/applications/reviewer/${currentReviewerId}`, { 
+            credentials: 'include' 
+        });
+        const appsResult = await appsResponse.json();
+        
+        if (!appsResult.success) throw new Error(appsResult.error);
+        
+        const applications = appsResult.data;
+        const approvedApps = applications.filter(app => app.status === 'approved');
+        const pendingApps = applications.filter(app => app.status === 'pending');
+        const appliedProjectIds = applications.map(app => app.projectId._id || app.projectId);
+        
+        // Get reviewer's feedback
+        const feedbackResponse = await fetch(`${API_URL}/feedback/reviewer/${currentReviewerId}`, {
+            credentials: 'include'
+        });
+        const feedbackResult = await feedbackResponse.json();
+        const submittedProjectIds = feedbackResult.success 
+            ? feedbackResult.data.map(f => f.projectId._id || f.projectId)
+            : [];
+        
+        // Get all projects
+        const projectsResponse = await fetch(`${API_URL}/projects?sort=newest`, { 
+            credentials: 'include' 
+        });
+        const projectsResult = await projectsResponse.json();
+        
+        if (!projectsResult.success) throw new Error(projectsResult.error);
+        
+        // Filter available projects (not applied AND not own)
+        const availableProjects = projectsResult.data.filter(p => {
+            const notApplied = !appliedProjectIds.includes(p._id);
+            const notOwn = p.ownerId !== currentUser.id;
+            const isOpen = new Date(p.deadline) > new Date();
+            return notApplied && notOwn && isOpen;
+        });
+        
+        container.innerHTML = '';
+        
+        // ✅ APPROVED PROJECTS SECTION
+        if (approvedApps.length > 0) {
+            const approvedSection = document.createElement('div');
+            approvedSection.innerHTML = '<h3 style="color: var(--success-green); margin-bottom: 1rem;">✅ Approved - Submit Your Feedback</h3>';
+            container.appendChild(approvedSection);
+            
+            for (const app of approvedApps) {
+                const project = app.projectId;
+                const hasFeedback = submittedProjectIds.includes(project._id);
+                
+                const card = document.createElement('div');
+                card.className = 'apply-project-card';
+                card.style.borderColor = 'var(--success-green)';
+                
+                const deadline = new Date(project.deadline);
+                const hoursLeft = Math.floor((deadline - new Date()) / (1000 * 60 * 60));
+                const daysLeft = Math.floor(hoursLeft / 24);
+                
+                card.innerHTML = `
+                    <div class="apply-project-info">
+                        <h4>${escapeHtml(project.title)}</h4>
+                        <p style="color: var(--neutral-mid); margin: 8px 0;">
+                            <span class="project-badge badge-${project.type}">${project.type}</span>
+                            <span style="margin-left: 12px;">⏰ ${daysLeft}d ${hoursLeft % 24}h left</span>
+                        </p>
+                        <p style="color: var(--neutral-mid); margin: 8px 0;">
+                            ${escapeHtml(safeDescription(project.description, 120))}
+                        </p>
+                        <p style="color: var(--primary-blue); margin: 8px 0;">
+                            🔗 <a href="${project.link}" target="_blank" style="color: var(--primary-blue);">${project.link}</a>
+                        </p>
+                        <p style="color: var(--success-green); font-weight: 700; font-size: 18px; margin: 8px 0;">+${project.xpReward} XP</p>
+                        ${hasFeedback ? `
+                            <p style="color: var(--success-green); font-weight: 600; margin: 8px 0;">
+                                ✅ Feedback submitted!
+                            </p>
+                        ` : ''}
+                    </div>
+                    ${hasFeedback ? `
+                        <button class="btn-secondary" disabled>
+                            ✅ Feedback Submitted
+                        </button>
+                    ` : `
+                        <button class="btn-primary" onclick="window.openFeedbackModal('${project._id}')">
+                            📝 Submit Feedback
+                        </button>
+                    `}
+                `;
+                
+                container.appendChild(card);
+            }
+        }
+        
+        // ✅ PENDING APPLICATIONS SECTION
+        if (pendingApps.length > 0) {
+            const pendingSection = document.createElement('div');
+            pendingSection.innerHTML = '<h3 style="color: var(--warning-orange); margin: 2rem 0 1rem 0;">⏳ Pending Approval</h3>';
+            container.appendChild(pendingSection);
+            
+            pendingApps.forEach(app => {
+                const project = app.projectId;
+                const card = document.createElement('div');
+                card.className = 'apply-project-card';
+                card.style.borderColor = 'var(--warning-orange)';
+                card.style.opacity = '0.7';
+                
+                card.innerHTML = `
+                    <div class="apply-project-info">
+                        <h4>${escapeHtml(project.title)}</h4>
+                        <p style="color: var(--warning-orange); font-weight: 600;">Waiting for owner approval...</p>
+                    </div>
+                    <button class="btn-secondary" disabled>
+                        ⏳ Pending
+                    </button>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        // ✅ AVAILABLE PROJECTS SECTION
+        if (availableProjects.length > 0) {
+            const availableSection = document.createElement('div');
+            availableSection.innerHTML = '<h3 style="color: var(--primary-blue); margin: 2rem 0 1rem 0;">📦 Available Projects</h3>';
+            container.appendChild(availableSection);
+            
+            availableProjects.forEach(project => {
+                const card = document.createElement('div');
+                card.className = 'apply-project-card';
+                
+                const deadline = new Date(project.deadline);
+                const hoursLeft = Math.floor((deadline - new Date()) / (1000 * 60 * 60));
+                const daysLeft = Math.floor(hoursLeft / 24);
+                
+                card.innerHTML = `
+                    <div class="apply-project-info">
+                        <h4>${escapeHtml(project.title)}</h4>
+                        <p style="color: var(--neutral-mid); margin: 8px 0;">
+                            <span class="project-badge badge-${project.type}">${project.type}</span>
+                            <span style="margin-left: 12px;">⏰ ${daysLeft}d ${hoursLeft % 24}h left</span>
+                        </p>
+                        <p style="color: var(--neutral-mid); margin: 8px 0;">
+                            ${escapeHtml(safeDescription(project.description, 80))}
+                        </p>
+                        <p style="color: var(--warning-orange); font-size: 13px; margin: 8px 0;">
+                            🔒 Full details visible after approval
+                        </p>
+                        <p style="color: var(--success-green); font-weight: 700; font-size: 18px; margin: 8px 0;">+${project.xpReward} XP</p>
+                    </div>
+                    <button class="btn-primary" onclick="window.openApplicationModal('${project._id}')">
+                        Apply to Review
+                    </button>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+        
+        if (approvedApps.length === 0 && pendingApps.length === 0 && availableProjects.length === 0) {
+            container.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div><div class="empty-title">No projects available</div><div class="empty-message">Check back later!</div></div>';
+        }
+
+    } catch (error) {
+        console.error('Load projects for application error:', error);
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading projects</div></div>';
+    }
+}
+
+// Open application modal
+window.openApplicationModal = async function(projectId) {
+    try {
+        const response = await fetch(`${API_URL}/projects/${projectId}`, { credentials: 'include' });
+        const result = await response.json();
+
+        if (!result.success) throw new Error(result.error);
+
+        const project = result.data;
+        
+        const modalInfo = document.getElementById('modalProjectInfo');
+        modalInfo.innerHTML = `
+            <h3>${escapeHtml(project.title)}</h3>
+            <p style="margin: 12px 0;"><span class="project-badge badge-${project.type}">${project.type}</span></p>
+            <p style="color: var(--neutral-mid);">${escapeHtml(safeDescription(project.description, 200))}</p>
+            <p style="color: var(--success-green); font-weight: 700; margin-top: 12px;">Reward: +${project.xpReward} XP</p>
+        `;
+
+        const applicationForm = document.getElementById('applicationForm');
+        applicationForm.onsubmit = (e) => handleApplicationSubmit(e, projectId);
+
+        document.getElementById('applicationModal').classList.add('active');
+
+    } catch (error) {
+        showError(error.message);
+    }
+};
+
+// Handle application submit
+async function handleApplicationSubmit(e, projectId) {
+    e.preventDefault();
+
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+
+    try {
+        const qualifications = document.getElementById('qualifications').value.trim();
+        const focusAreas = document.getElementById('focusAreas').value.trim();
+        const ndaAccept = document.getElementById('ndaAccept').checked;
+
+        if (!ndaAccept) {
+            throw new Error('You must accept the NDA to apply');
+        }
+
+        const reviewerResponse = await fetch(`${API_URL}/reviewers/${currentReviewerId}`, { credentials: 'include' });
+        const reviewerResult = await reviewerResponse.json();
+        const reviewer = reviewerResult.data;
+
+        const response = await fetch(`${API_URL}/applications`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                reviewerId: currentReviewerId,
+                reviewerUsername: reviewer.username,
+                qualifications,
+                focusAreas
+            })
+        });
+
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+
+        showSuccess('Application submitted successfully!');
+        closeModals();
+        document.getElementById('applicationForm').reset();
+        loadProjectsForApplication();
+
+    } catch (error) {
+        showError(error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Application';
+    }
+}
+
+// Open feedback list modal
+window.openFeedbackListModal = async function(projectId) {
+    console.log('Opening feedback list for project:', projectId);
+    
+    try {
+        const modal = document.getElementById('feedbackListModal');
+        const feedbackList = document.getElementById('feedbackList');
+        
+        if (!modal || !feedbackList) {
+            console.error('Feedback list modal elements not found');
+            return;
+        }
+        
+        feedbackList.innerHTML = '<div class="loading">Loading feedback...</div>';
+        modal.classList.add('active');
+        
+        const response = await fetch(`${API_URL}/feedback/project/${projectId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        console.log('Feedback result:', result);
+        
+        if (!result.success) throw new Error(result.error);
+        
+        const feedbackItems = result.data;
+        
+        if (feedbackItems.length === 0) {
+            feedbackList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">💬</div>
+                    <div class="empty-title">No feedback yet</div>
+                    <div class="empty-message">Approved reviewers will submit feedback here.</div>
+                </div>
+            `;
+            return;
+        }
+        
+        feedbackList.innerHTML = '';
+        
+        feedbackItems.forEach(feedback => {
+            const card = document.createElement('div');
+            card.className = 'feedback-card';
+            
+            const date = new Date(feedback.submittedAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: 'numeric',
+                minute: '2-digit'
+            });
+            
+            let ratingSection = '';
+            if (feedback.isRated) {
+                ratingSection = `
+                    <div style="background: #D1FAE5; padding: 16px; border-radius: 8px; margin-top: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <strong style="color: #065F46;">Your Rating:</strong>
+                                <div style="font-size: 24px; color: #F59E0B; margin-top: 4px;">
+                                    ${'★'.repeat(feedback.ownerRating)}${'☆'.repeat(5 - feedback.ownerRating)}
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 20px; font-weight: 700; color: #10B981;">+${feedback.xpAwarded} XP</div>
+                                <div style="font-size: 12px; color: #065F46;">Awarded</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                ratingSection = `
+                    <div style="background: #FEF3C7; padding: 16px; border-radius: 8px; margin-top: 16px;">
+                        <strong style="color: #92400E; display: block; margin-bottom: 12px;">Rate This Feedback:</strong>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <button class="btn-success btn-small" onclick="window.rateFeedback('${feedback._id}', 5)">★★★★★ Excellent</button>
+                            <button class="btn-success btn-small" onclick="window.rateFeedback('${feedback._id}', 4)">★★★★☆ Good</button>
+                            <button class="btn-secondary btn-small" onclick="window.rateFeedback('${feedback._id}', 3)">★★★☆☆ Average</button>
+                            <button class="btn-secondary btn-small" onclick="window.rateFeedback('${feedback._id}', 2)">★★☆☆☆ Below</button>
+                            <button class="btn-danger btn-small" onclick="window.rateFeedback('${feedback._id}', 1)">★☆☆☆☆ Poor</button>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            card.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 16px;">
+                    <div>
+                        <h4 style="margin: 0; color: var(--neutral-dark);">${escapeHtml(feedback.reviewerUsername)}</h4>
+                        <p style="color: var(--neutral-mid); font-size: 13px; margin: 4px 0 0 0;">${date}</p>
+                    </div>
+                    ${feedback.projectRating ? `
+                        <div style="text-align: right;">
+                            <div style="font-size: 20px; color: #F59E0B;">${'★'.repeat(feedback.projectRating)}${'☆'.repeat(5 - feedback.projectRating)}</div>
+                            <div style="font-size: 12px; color: var(--neutral-mid);">Project Rating</div>
+                        </div>
+                    ` : ''}
+                </div>
+                
+                <div style="background: var(--neutral-light); padding: 16px; border-radius: 8px; margin-bottom: 16px;">
+                    <p style="color: var(--neutral-mid); line-height: 1.6; margin: 0; white-space: pre-wrap;">${escapeHtml(feedback.feedbackText)}</p>
+                </div>
+                
+                ${ratingSection}
+            `;
+            
+            feedbackList.appendChild(card);
+        });
+        
+        console.log('✓ Feedback list loaded');
+        
+    } catch (error) {
+        console.error('Load feedback list error:', error);
+        const feedbackList = document.getElementById('feedbackList');
+        if (feedbackList) {
+            feedbackList.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">❌</div>
+                    <div class="empty-title">Error loading feedback</div>
+                    <div class="empty-message">${escapeHtml(error.message)}</div>
+                </div>
+            `;
+        }
+    }
+};
+
+// Rate feedback function
+window.rateFeedback = async function(feedbackId, rating) {
+    console.log('Rating feedback:', feedbackId, 'with', rating, 'stars');
+    
+    try {
+        const response = await fetch(`${API_URL}/feedback/${feedbackId}/rate`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rating })
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        console.log('Rate feedback result:', result);
+        
+        if (!result.success) throw new Error(result.error);
+        
+        showSuccess(`✅ Rated ${rating} stars! Reviewer earned ${result.data.xpAwarded} XP.`);
+        
+        const modal = document.getElementById('feedbackListModal');
+        const projectId = modal.dataset.projectId;
+        if (projectId) {
+            await openFeedbackListModal(projectId);
+        }
+        
+    } catch (error) {
+        console.error('Rate feedback error:', error);
+        showError('Failed to rate: ' + error.message);
+    }
+};
+
+// Open feedback modal
+window.openFeedbackModal = async function(projectId) {
+    console.log('Opening feedback modal for project:', projectId);
+    
+    try {
+        const modal = document.getElementById('feedbackModal');
+        const feedbackProjectInfo = document.getElementById('feedbackProjectInfo');
+        
+        if (!modal || !feedbackProjectInfo) {
+            console.error('Feedback modal elements not found');
+            return;
+        }
+        
+        const response = await fetch(`${API_URL}/projects/${projectId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        
+        const project = result.data;
+        
+        feedbackProjectInfo.innerHTML = `
+            <h3>${escapeHtml(project.title)}</h3>
+            <p style="margin: 12px 0;"><span class="project-badge badge-${project.type}">${project.type}</span></p>
+            <p style="color: var(--neutral-mid);">${escapeHtml(safeDescription(project.description, 200))}</p>
+            <p style="color: var(--success-green); font-weight: 700; margin-top: 12px;">Reward: +${project.xpReward} XP</p>
+        `;
+        
+        const feedbackForm = document.getElementById('feedbackForm');
+        feedbackForm.onsubmit = (e) => handleFeedbackSubmit(e, projectId);
+        
+        const feedbackText = document.getElementById('feedbackText');
+        const feedbackCounter = document.getElementById('feedbackCounter');
+        
+        feedbackText.value = '';
+        feedbackCounter.textContent = '0 / 50 characters minimum';
+        feedbackCounter.style.color = 'var(--error-red)';
+        
+        feedbackText.oninput = () => {
+            const length = feedbackText.value.length;
+            feedbackCounter.textContent = `${length} / 50 characters minimum`;
+            feedbackCounter.style.color = length >= 50 ? 'var(--success-green)' : 'var(--error-red)';
+        };
+        
+        modal.classList.add('active');
+        
+    } catch (error) {
+        console.error('Open feedback modal error:', error);
+        showError('Failed to open feedback form: ' + error.message);
+    }
+};
+
+// Handle feedback submission
+async function handleFeedbackSubmit(e, projectId) {
+    e.preventDefault();
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+    
+    try {
+        const feedbackText = document.getElementById('feedbackText').value.trim();
+        const projectRating = document.getElementById('projectRating').value;
+        
+        if (feedbackText.length < 50) {
+            throw new Error('Feedback must be at least 50 characters');
+        }
+        
+        if (!currentReviewerId) {
+            throw new Error('You must be a reviewer to submit feedback');
+        }
+        
+        const reviewerResponse = await fetch(`${API_URL}/reviewers/${currentReviewerId}`, {
+            credentials: 'include'
+        });
+        
+        if (!reviewerResponse.ok) throw new Error('Failed to get reviewer data');
+        
+        const reviewerResult = await reviewerResponse.json();
+        const reviewer = reviewerResult.data;
+        
+        const response = await fetch(`${API_URL}/feedback`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                projectId,
+                reviewerId: currentReviewerId,
+                reviewerUsername: reviewer.username,
+                feedbackText,
+                projectRating: projectRating || null
+            })
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        console.log('Feedback submit result:', result);
+        
+        if (!result.success) throw new Error(result.error);
+        
+        showSuccess('✅ Feedback submitted successfully! You\'ll earn XP when the owner rates it.');
+        closeModals();
+        document.getElementById('feedbackForm').reset();
+        
+        if (document.getElementById('dashboard-tab').classList.contains('active')) {
+            loadDashboard();
+        }
+        
+    } catch (error) {
+        console.error('Submit feedback error:', error);
+        showError(error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Feedback';
     }
 }
 
@@ -1116,36 +1552,17 @@ function closeModals() {
 function showSuccess(message) {
     const notification = document.createElement('div');
     notification.className = 'success-notification';
-    notification.innerHTML = `
-        <div class="notification-content">
-            <div class="notification-icon">✅</div>
-            <div class="notification-message">${escapeHtml(message)}</div>
-        </div>
-    `;
+    notification.innerHTML = `<div class="notification-content"><div class="notification-icon">✅</div><div class="notification-message">${escapeHtml(message)}</div></div>`;
     document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 3000);
+    setTimeout(() => notification.remove(), 3000);
 }
 
 function showError(message) {
     const notification = document.createElement('div');
     notification.className = 'error-notification';
-    notification.innerHTML = `
-        <div class="error-content">
-            <div class="error-icon">⚠️</div>
-            <div class="error-message">
-                <strong>Error</strong>
-                <p>${escapeHtml(message)}</p>
-            </div>
-        </div>
-    `;
+    notification.innerHTML = `<div class="error-content"><div class="error-icon">⚠️</div><div class="error-message"><strong>Error</strong><p>${escapeHtml(message)}</p></div></div>`;
     document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.remove();
-    }, 5000);
+    setTimeout(() => notification.remove(), 5000);
 }
 
 // Initialize app

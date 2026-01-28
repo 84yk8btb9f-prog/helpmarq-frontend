@@ -13,13 +13,13 @@
                 <h1>HelpMarq</h1>
                 <p class="tagline">Expert insights. Accessible pricing.</p>
             </div>
-            
+
             <form id="signupForm" class="form">
                 <div class="form-group">
                     <label for="name">Full Name *</label>
-                    <input 
-                        type="text" 
-                        id="name" 
+                    <input
+                        type="text"
+                        id="name"
                         placeholder="John Doe"
                         required
                         minlength="2"
@@ -28,9 +28,9 @@
 
                 <div class="form-group">
                     <label for="email">Email *</label>
-                    <input 
-                        type="email" 
-                        id="email" 
+                    <input
+                        type="email"
+                        id="email"
                         placeholder="your@email.com"
                         required
                     >
@@ -38,9 +38,9 @@
 
                 <div class="form-group">
                     <label for="password">Password *</label>
-                    <input 
-                        type="password" 
-                        id="password" 
+                    <input
+                        type="password"
+                        id="password"
                         placeholder="••••••••"
                         minlength="8"
                         required
@@ -54,7 +54,7 @@
             </form>
 
             <div id="message" class="message"></div>
-            
+
             <div class="auth-footer">
                 <p>Already have an account? <a href="login.html">Log in</a></p>
             </div>
@@ -62,7 +62,13 @@
     </div>
 
     <script type="module">
-        import { signUp } from './lib/auth.js';
+        console.log('=== SIGNUP PAGE LOADED ===');
+        
+        const API_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
+        
+        console.log('API_URL:', API_URL);
 
         const form = document.getElementById('signupForm');
         const message = document.getElementById('message');
@@ -70,39 +76,75 @@
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            
+            console.log('=== FORM SUBMITTED ===');
+
             signupBtn.disabled = true;
             signupBtn.textContent = 'Creating account...';
             message.style.display = 'none';
-            
+
             try {
                 const name = document.getElementById('name').value.trim();
                 const email = document.getElementById('email').value.trim();
                 const password = document.getElementById('password').value;
 
+                console.log('Signup data:', { name, email, password: '***' });
+
                 if (password.length < 8) {
                     throw new Error('Password must be at least 8 characters');
                 }
 
-                await signUp(name, email, password);
-
-                message.textContent = '✅ Account created! Redirecting...';
-                message.className = 'message success';
-                message.style.display = 'block';
-
-                setTimeout(() => {
-                    window.location.href = 'role-select.html';
-                }, 1500);
+                console.log('Sending request to:', `${API_URL}/auth/sign-up/email`);
                 
+                const response = await fetch(`${API_URL}/auth/sign-up/email`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name, email, password })
+                });
+
+                console.log('Response status:', response.status);
+
+                const responseText = await response.text();
+                console.log('Response text:', responseText);
+
+                if (!response.ok) {
+                    let errorData;
+                    try {
+                        errorData = JSON.parse(responseText);
+                    } catch {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    throw new Error(errorData.message || errorData.error || 'Sign up failed');
+                }
+
+                const result = JSON.parse(responseText);
+                console.log('Signup success:', result);
+
+                // Store email for OTP verification
+                localStorage.setItem('pendingVerificationEmail', email);
+                
+                // Redirect to OTP page
+                window.location.href = '/verify-otp.html';
+
             } catch (error) {
+                console.error('=== SIGNUP ERROR ===');
+                console.error('Error:', error);
+                console.error('Error message:', error.message);
+                console.error('Error stack:', error.stack);
+                
                 message.textContent = '❌ ' + error.message;
                 message.className = 'message error';
                 message.style.display = 'block';
-                
+
                 signupBtn.disabled = false;
                 signupBtn.textContent = 'Create Account';
             }
         });
+
+        console.log('✓ Signup form handler attached');
     </script>
 </body>
 </html>

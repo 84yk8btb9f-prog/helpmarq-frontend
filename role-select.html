@@ -13,16 +13,16 @@
                 <h1>Welcome to HelpMarq!</h1>
                 <p class="tagline">Choose how you want to get started</p>
             </div>
-            
+
             <div class="role-options">
-                <div class="role-card" onclick="selectRole('owner')">
+                <div class="role-card" id="ownerCard">
                     <div class="role-icon">📊</div>
                     <h3>Project Owner</h3>
                     <p>Upload projects and get expert feedback</p>
                     <button class="btn-primary">I'm a Project Owner</button>
                 </div>
-                
-                <div class="role-card" onclick="selectRole('reviewer')">
+
+                <div class="role-card" id="reviewerCard">
                     <div class="role-icon">⭐</div>
                     <h3>Reviewer</h3>
                     <p>Review projects and earn XP</p>
@@ -31,35 +31,115 @@
             </div>
         </div>
     </div>
-
-    <script type="module">
-        import { getCurrentUser } from './lib/auth.js';
-
-        window.addEventListener('load', async () => {
-            const user = await getCurrentUser();
-            if (!user) {
-                window.location.href = 'login.html';
-                return;
-            }
-
-            // Check if role already exists
-            const existingRole = localStorage.getItem('userRole');
-            if (existingRole) {
-                window.location.href = 'index.html';
-                return;
-            }
-        });
-
-        window.selectRole = function(role) {
-            localStorage.setItem('userRole', role);
-            sessionStorage.setItem('roleJustSelected', 'true');
-            
-            if (role === 'owner') {
-                window.location.href = 'index.html';
+<script type="module">
+    // Check if coming from email verification
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    
+    if (token) {
+        // Verify the token with backend
+        fetch(`http://localhost:3000/api/auth/verify-email?token=${token}`, {
+            method: 'GET',
+            credentials: 'include'
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                console.log('✅ Email verified successfully');
+                // Show success message
+                alert('Email verified! Please select your role to continue.');
             } else {
-                window.location.href = 'create-reviewer.html';
+                console.error('❌ Verification failed:', data.error);
+                alert('Verification failed. Please try again.');
             }
-        };
-    </script>
+        })
+        .catch(error => {
+            console.error('Verification error:', error);
+        });
+    }
+</script>
+
+   <script type="module">
+    import { getCurrentUser } from './lib/auth.js';
+
+    window.addEventListener('load', async () => {
+        const user = await getCurrentUser();
+        if (!user) {
+            window.location.href = 'login.html';
+            return;
+        }
+        const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('verified') === 'true') {
+        sessionStorage.setItem('justVerified', 'true');
+        console.log('User just verified email');
+    }
+
+        console.log('User on role select:', user);
+
+        // Check if role already exists in backend
+        const API_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
+
+        try {
+            const response = await fetch(`${API_URL}/user/me`, {
+                credentials: 'include'
+            });
+            const result = await response.json();
+            
+            if (result.success && result.role) {
+                console.log('User already has role:', result.role);
+                localStorage.setItem('userRole', result.role);
+                window.location.href = 'index.html';
+                return;
+            }
+        } catch (error) {
+            console.log('Could not check existing role:', error);
+        }
+
+        // Owner role handler
+        document.getElementById('ownerCard').addEventListener('click', async () => {
+            console.log('Owner role selected');
+         try {
+        const user = await getCurrentUser();
+        const API_URL = window.location.hostname === 'localhost'
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
+        
+        const welcomeResponse = await fetch(`${API_URL}/send-welcome-email`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                email: user.email, 
+                name: user.name || user.email 
+            })
+        });
+        const welcomeResult = await welcomeResponse.json();
+        console.log('Welcome email result:', welcomeResult);
+    } catch (emailError) {
+        console.log('Welcome email error (non-blocking):', emailError);
+    }
+    
+    localStorage.setItem('userRole', 'owner');
+    sessionStorage.setItem('roleJustSelected', 'true');
+    sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+    
+    await new Promise(resolve => setTimeout(resolve, 100));
+    window.location.href = 'index.html';
+});
+
+        // Reviewer role handler
+        document.getElementById('reviewerCard').addEventListener('click', async () => {
+            console.log('Reviewer role selected');
+            localStorage.setItem('userRole', 'reviewer');
+            sessionStorage.setItem('roleJustSelected', 'true');
+            sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+            window.location.href = 'create-reviewer.html';
+        });
+    });
+</script>
 </body>
 </html>

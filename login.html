@@ -13,13 +13,13 @@
                 <h1>HelpMarq</h1>
                 <p class="tagline">Expert insights. Accessible pricing.</p>
             </div>
-            
+
             <form id="loginForm" class="form">
                 <div class="form-group">
                     <label for="email">Email *</label>
-                    <input 
-                        type="email" 
-                        id="email" 
+                    <input
+                        type="email"
+                        id="email"
                         placeholder="your@email.com"
                         required
                     >
@@ -27,9 +27,9 @@
 
                 <div class="form-group">
                     <label for="password">Password *</label>
-                    <input 
-                        type="password" 
-                        id="password" 
+                    <input
+                        type="password"
+                        id="password"
                         placeholder="••••••••"
                         required
                     >
@@ -41,7 +41,7 @@
             </form>
 
             <div id="message" class="message"></div>
-            
+
             <div class="auth-footer">
                 <p>Don't have an account? <a href="signup.html">Sign up</a></p>
             </div>
@@ -49,49 +49,94 @@
     </div>
 
     <script type="module">
-        import { signIn } from './lib/auth.js';
+    import { signIn, getSession } from './lib/auth.js';
 
-        const form = document.getElementById('loginForm');
-        const message = document.getElementById('message');
-        const loginBtn = document.getElementById('loginBtn');
+    const form = document.getElementById('loginForm');
+    const message = document.getElementById('message');
+    const loginBtn = document.getElementById('loginBtn');
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        loginBtn.disabled = true;
+        loginBtn.textContent = 'Logging in...';
+        message.style.display = 'none';
+
+        try {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            console.log('🔐 Attempting login:', email);
+
+            const result = await signIn(email, password);
+            console.log('✅ Login successful');
+
+            message.textContent = '✅ Login successful! Redirecting...';
+            message.className = 'message success';
+            message.style.display = 'block';
+
+            // Wait a moment for session to be fully established
+            await new Promise(resolve => setTimeout(resolve, 500));
+
+            // Check if user has role
+            const session = await getSession();
+            const user = session?.user;
             
-            loginBtn.disabled = true;
-            loginBtn.textContent = 'Logging in...';
-            message.style.display = 'none';
+            console.log('User session:', user);
+            
+            // Check backend for role
+            const API_URL = window.location.hostname === 'localhost'
+                ? 'http://localhost:3000/api'
+                : 'https://helpmarq-backend.onrender.com/api';
             
             try {
-                const email = document.getElementById('email').value.trim();
-                const password = document.getElementById('password').value;
-
-                await signIn(email, password);
-
-                message.textContent = '✅ Login successful! Redirecting...';
-                message.className = 'message success';
-                message.style.display = 'block';
-
-                // Check if user has a role
-                const hasRole = localStorage.getItem('userRole');
+                const roleResponse = await fetch(`${API_URL}/user/me`, {
+                    credentials: 'include'
+                });
+                const roleResult = await roleResponse.json();
                 
-                setTimeout(() => {
-                    if (hasRole) {
+                console.log('Role check result:', roleResult);
+                
+                if (roleResult.success && roleResult.role) {
+                    // Has role - redirect to dashboard
+                    localStorage.setItem('userRole', roleResult.role);
+                    
+                    setTimeout(() => {
                         window.location.href = 'index.html';
-                    } else {
+                    }, 1000);
+                } else {
+                    // No role - show selection
+                    setTimeout(() => {
                         window.location.href = 'role-select.html';
-                    }
-                }, 1500);
-                
-            } catch (error) {
-                message.textContent = '❌ ' + error.message;
-                message.className = 'message error';
-                message.style.display = 'block';
-                
-                loginBtn.disabled = false;
-                loginBtn.textContent = 'Log In';
+                    }, 1000);
+                }
+            } catch (roleError) {
+                console.error('Role check failed:', roleError);
+                // Fallback to role selection
+                setTimeout(() => {
+                    window.location.href = 'role-select.html';
+                }, 1000);
             }
-        });
-    </script>
+
+        } catch (error) {
+            console.error('❌ Login error:', error);
+            
+            let errorMessage = error.message;
+            
+            if (error.message.includes('Invalid email or password')) {
+                errorMessage = 'Email or password incorrect. Did you verify your email after signup?';
+            } else if (error.message.includes('401')) {
+                errorMessage = 'Login failed. Make sure you verified your email after signup.';
+            }
+            
+            message.textContent = '❌ ' + errorMessage;
+            message.className = 'message error';
+            message.style.display = 'block';
+
+            loginBtn.disabled = false;
+            loginBtn.textContent = 'Log In';
+        }
+    });
+</script>
 </body>
 </html>
