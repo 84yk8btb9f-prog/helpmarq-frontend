@@ -2,9 +2,11 @@
 import { getCurrentUser, signOut } from './lib/auth.js';
 import { getCached, setCache, clearCache } from './lib/cache.js';
 
-const API_URL = window.location.hostname === 'localhost'
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
     ? 'http://localhost:3000/api'
     : 'https://helpmarq-backend.onrender.com/api';
+
+console.log('🔗 API URL:', API_URL);
 
 // ✅ ADD: Helper function for null-safe descriptions
 function safeDescription(description, maxLength = 120) {
