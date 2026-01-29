@@ -55,6 +55,11 @@
     const message = document.getElementById('message');
     const loginBtn = document.getElementById('loginBtn');
 
+    // ✅ FIX: API URL helper
+    const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3000/api'
+        : 'https://helpmarq-backend.onrender.com/api';
+
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
 
@@ -68,54 +73,81 @@
 
             console.log('🔐 Attempting login:', email);
 
+            // ✅ FIX: Sign in
             const result = await signIn(email, password);
             console.log('✅ Login successful');
 
-            message.textContent = '✅ Login successful! Redirecting...';
+            message.textContent = '✅ Login successful! Checking role...';
             message.className = 'message success';
             message.style.display = 'block';
 
-            // Wait a moment for session to be fully established
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // ✅ FIX: Wait for session to be fully established
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
-            // Check if user has role
-            const session = await getSession();
-            const user = session?.user;
-            
-            console.log('User session:', user);
-            
-            // Check backend for role
-            const API_URL = window.location.hostname === 'localhost'
-                ? 'http://localhost:3000/api'
-                : 'https://helpmarq-backend.onrender.com/api';
-            
-            try {
-                const roleResponse = await fetch(`${API_URL}/user/me`, {
-                    credentials: 'include'
-                });
-                const roleResult = await roleResponse.json();
-                
-                console.log('Role check result:', roleResult);
-                
-                if (roleResult.success && roleResult.role) {
-                    // Has role - redirect to dashboard
-                    localStorage.setItem('userRole', roleResult.role);
+            // ✅ FIX: Check for role with retry logic
+            let roleResult = null;
+            let attempts = 0;
+            const maxAttempts = 3;
+
+            while (attempts < maxAttempts && !roleResult) {
+                try {
+                    console.log(`Attempt ${attempts + 1}: Checking role...`);
                     
-                    setTimeout(() => {
-                        window.location.href = 'index.html';
-                    }, 1000);
-                } else {
-                    // No role - show selection
-                    setTimeout(() => {
-                        window.location.href = 'role-select.html';
-                    }, 1000);
+                    const roleResponse = await fetch(`${API_URL}/user/me`, {
+                        credentials: 'include',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    });
+                    
+                    if (roleResponse.ok) {
+                        roleResult = await roleResponse.json();
+                        console.log('Role check result:', roleResult);
+                        break;
+                    } else if (roleResponse.status === 401) {
+                        console.log('401 - Session not ready, retrying...');
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        attempts++;
+                    } else {
+                        throw new Error(`HTTP ${roleResponse.status}`);
+                    }
+                } catch (error) {
+                    console.error('Role check error:', error);
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                    }
                 }
-            } catch (roleError) {
-                console.error('Role check failed:', roleError);
-                // Fallback to role selection
-                setTimeout(() => {
+            }
+            
+            // ✅ FIX: Handle role result
+            if (roleResult && roleResult.success) {
+                if (roleResult.role === 'reviewer') {
+                    localStorage.setItem('userRole', 'reviewer');
+                    localStorage.setItem('reviewerId', roleResult.data._id);
+                    console.log('✓ REVIEWER role - redirecting to dashboard');
+                    window.location.href = 'index.html';
+                } else if (roleResult.role === 'owner') {
+                    localStorage.setItem('userRole', 'owner');
+                    console.log('✓ OWNER role - redirecting to dashboard');
+                    window.location.href = 'index.html';
+                } else {
+                    // No role yet
+                    console.log('→ No role - redirecting to role selection');
+                    localStorage.removeItem('userRole');
                     window.location.href = 'role-select.html';
-                }, 1000);
+                }
+            } else {
+                // ✅ FIX: Fallback if role check failed after retries
+                console.log('Could not verify role after retries, checking localStorage');
+                const storedRole = localStorage.getItem('userRole');
+                if (storedRole) {
+                    console.log('Using stored role:', storedRole);
+                    window.location.href = 'index.html';
+                } else {
+                    console.log('No stored role, going to role selection');
+                    window.location.href = 'role-select.html';
+                }
             }
 
         } catch (error) {
