@@ -1461,57 +1461,57 @@ select:focus {
     border-color: var(--accent-purple);
     box-shadow: var(--shadow-sm);
 }
-/* ========================================
-   MODAL OVERRIDES – FORCE VISIBILITY & Z-INDEX
-   ======================================== */
-
+/* Reviewer Profile Modal - FIXED */
 .modal {
     display: none;
     position: fixed;
-    z-index: 10000;
-    left: 0;
     top: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
-    overflow: auto;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 999999;
 }
 
 .modal.active {
-    display: flex !important;
+    display: block !important;
+}
+
+.modal-content {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 40px;
+    border-radius: 16px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+    z-index: 1000000;
+}
+
+.modal-close {
+    position: absolute;
+    top: 16px;
+    right: 20px;
+    font-size: 32px;
+    font-weight: bold;
+    color: #666;
+    cursor: pointer;
+    background: none;
+    border: none;
+    line-height: 1;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.modal-content {
-    background-color: #ffffff;
-    margin: auto;
-    padding: 20px;
-    border: 1px solid #888;
-    width: 90%;
-    max-width: 600px;
-    border-radius: 8px;
-    position: relative;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.modal-close {
-    color: #aaa;
-    float: right;
-    font-size: 28px;
-    font-weight: bold;
-    cursor: pointer;
-    line-height: 20px;
-}
-
-.modal-close:hover,
-.modal-close:focus {
+.modal-close:hover {
     color: #000;
-}
-
-.loading {
-    text-align: center;
-    padding: 40px;
-    color: #666;
 }

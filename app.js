@@ -665,87 +665,99 @@ window.openApplicantsModal = async function(projectId) {
 
 // ✅ FIXED: View reviewer full profile
 window.viewReviewerProfile = async function(reviewerId) {
-    console.log('Viewing reviewer profile:', reviewerId);
+    console.log('Opening profile:', reviewerId);
+    
+    const modal = document.getElementById('reviewerProfileModal');
+    const content = document.getElementById('reviewerProfileContent');
+    
+    if (!modal || !content) {
+        alert('Modal not found');
+        return;
+    }
+    
+    // Show modal - inline style
+    modal.style.display = 'flex';
+    
+    content.innerHTML = '<div style="text-align:center;padding:40px;"><p>Loading...</p></div>';
+    
+    const API_URL = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? 'http://localhost:3000/api'
+        : 'https://helpmarq-backend.onrender.com/api';
     
     try {
-        const modal = document.getElementById('reviewerProfileModal');
-        const content = document.getElementById('reviewerProfileContent');
-        
-        if (!modal || !content) {
-            console.error('Reviewer profile modal not found');
-            return;
-        }
-        
-        content.innerHTML = '<div class="loading">Loading profile...</div>';
-        modal.classList.add('active');
-        
         const response = await fetch(`${API_URL}/reviewers/${reviewerId}`, {
             credentials: 'include'
         });
         
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) throw new Error('Failed to fetch');
         
         const result = await response.json();
-        if (!result.success) throw new Error(result.error);
+        if (!result.success) throw new Error(result.message || 'Failed');
         
-        const reviewer = result.data;
+        const r = result.data;
         
         content.innerHTML = `
-            <div style="background: linear-gradient(135deg, #2563EB 0%, #8B5CF6 100%); color: white; padding: 32px; border-radius: 12px; margin-bottom: 24px; text-align: center;">
-                <h3 style="margin: 0 0 8px 0; font-size: 28px; color: white;">${escapeHtml(reviewer.username)}</h3>
-                <p style="margin: 0; opacity: 0.9;">Level ${reviewer.level} Reviewer</p>
-                <div style="display: flex; justify-content: center; gap: 32px; margin-top: 24px;">
-                    <div>
-                        <div style="font-size: 32px; font-weight: 700;">${reviewer.xp}</div>
-                        <div style="opacity: 0.9; font-size: 14px;">XP</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 32px; font-weight: 700;">${reviewer.totalReviews}</div>
-                        <div style="opacity: 0.9; font-size: 14px;">Reviews</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 32px; font-weight: 700;">${reviewer.averageRating.toFixed(1)}★</div>
-                        <div style="opacity: 0.9; font-size: 14px;">Rating</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
-                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">📧 Email:</strong>
-                <p style="margin: 0; color: var(--neutral-mid);">${escapeHtml(reviewer.email)}</p>
-            </div>
-            
-            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
-                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">💼 Expertise:</strong>
-                <p style="margin: 0; color: var(--neutral-mid);">${escapeHtml(reviewer.expertise)}</p>
-            </div>
-            
-            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
-                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">⏱️ Experience:</strong>
-                <p style="margin: 0; color: var(--neutral-mid);">${escapeHtml(reviewer.experience)} years</p>
-            </div>
-            
-            ${reviewer.portfolio ? `
-                <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
-                    <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">🔗 Portfolio:</strong>
-                    <a href="${escapeHtml(reviewer.portfolio)}" target="_blank" style="color: var(--primary-blue);">${escapeHtml(reviewer.portfolio)}</a>
-                </div>
-            ` : ''}
-            
-            <div style="background: var(--neutral-light); padding: 20px; border-radius: 8px; margin-bottom: 16px;">
-                <strong style="display: block; margin-bottom: 12px; color: var(--neutral-dark);">📝 Bio:</strong>
-                <p style="margin: 0; color: var(--neutral-mid); line-height: 1.6;">${escapeHtml(reviewer.bio)}</p>
+            <div style="padding:20px;color:#000;">
+                <h2 style="margin:0 0 20px;color:#1C1C1E;">${r.firstName || ''} ${r.lastName || ''}</h2>
+                <p style="margin:8px 0;"><strong>Rating:</strong> ${(r.averageRating || 0).toFixed(1)}/5</p>
+                <p style="margin:8px 0;"><strong>XP:</strong> ${r.xp || 0}</p>
+                <p style="margin:8px 0;"><strong>Reviews:</strong> ${r.completedReviews || 0}</p>
+                <p style="margin:8px 0;"><strong>Bio:</strong> ${r.bio || 'None'}</p>
+                ${r.portfolio ? `<p style="margin:8px 0;"><strong>Portfolio:</strong> <a href="${r.portfolio}" target="_blank" style="color:#2C5EF0;">${r.portfolio}</a></p>` : ''}
+                <button onclick="document.getElementById('reviewerProfileModal').style.display='none'" 
+                        style="margin-top:20px;padding:12px 24px;background:#2C5EF0;color:white;border:none;border-radius:8px;cursor:pointer;width:100%;">
+                    Close
+                </button>
             </div>
         `;
         
     } catch (error) {
-        console.error('View reviewer profile error:', error);
-        const content = document.getElementById('reviewerProfileContent');
-        if (content) {
-            content.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Error loading profile</div></div>`;
-        }
+        console.error('Error:', error);
+        content.innerHTML = `
+            <div style="padding:40px;text-align:center;">
+                <p style="color:red;">Error: ${error.message}</p>
+                <button onclick="document.getElementById('reviewerProfileModal').style.display='none'" 
+                        style="margin-top:16px;padding:10px 20px;background:#2C5EF0;color:white;border:none;border-radius:8px;cursor:pointer;">
+                    Close
+                </button>
+            </div>
+        `;
     }
 };
+
+// Close modal handlers
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Setting up modal close handlers');
+    
+    // Close button
+    const closeButtons = document.querySelectorAll('.modal-close');
+    closeButtons.forEach(btn => {
+        btn.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) {
+                modal.classList.remove('active');
+                modal.style.display = 'none';
+            }
+        });
+    });
+    
+    // Click outside
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                this.classList.remove('active');
+                this.style.display = 'none';
+            }
+     });
+    });
+    
+    console.log('Modal handlers ready');
+});
+
+
+
+
 
 // Approve application
 window.approveApplication = async function(applicationId) {
@@ -1054,50 +1066,51 @@ async function loadProjectsForApplication() {
             container.appendChild(approvedSection);
             
             for (const app of approvedApps) {
-                const project = app.projectId;
-                const hasFeedback = submittedProjectIds.includes(project._id);
-                
-                const card = document.createElement('div');
-                card.className = 'apply-project-card';
-                card.style.borderColor = 'var(--success-green)';
-                
-                const deadline = new Date(project.deadline);
-                const hoursLeft = Math.floor((deadline - new Date()) / (1000 * 60 * 60));
-                const daysLeft = Math.floor(hoursLeft / 24);
-                
-                card.innerHTML = `
-                    <div class="apply-project-info">
-                        <h4>${escapeHtml(project.title)}</h4>
-                        <p style="color: var(--neutral-mid); margin: 8px 0;">
-                            <span class="project-badge badge-${project.type}">${project.type}</span>
-                            <span style="margin-left: 12px;">⏰ ${daysLeft}d ${hoursLeft % 24}h left</span>
-                        </p>
-                        <p style="color: var(--neutral-mid); margin: 8px 0;">
-                            ${escapeHtml(safeDescription(project.description, 120))}
-                        </p>
-                        <p style="color: var(--primary-blue); margin: 8px 0;">
-                            🔗 <a href="${project.link}" target="_blank" style="color: var(--primary-blue);">${project.link}</a>
-                        </p>
-                        <p style="color: var(--success-green); font-weight: 700; font-size: 18px; margin: 8px 0;">+${project.xpReward} XP</p>
-                        ${hasFeedback ? `
-                            <p style="color: var(--success-green); font-weight: 600; margin: 8px 0;">
-                                ✅ Feedback submitted!
-                            </p>
-                        ` : ''}
-                    </div>
-                    ${hasFeedback ? `
-                        <button class="btn-secondary" disabled>
-                            ✅ Feedback Submitted
-                        </button>
-                    ` : `
-                        <button class="btn-primary" onclick="window.openFeedbackModal('${project._id}')">
-                            📝 Submit Feedback
-                        </button>
-                    `}
-                `;
-                
-                container.appendChild(card);
-            }
+    const project = app.projectId;
+    const hasFeedback = submittedProjectIds.includes(project._id);
+    
+    const card = document.createElement('div');
+    card.className = 'apply-project-card';
+    card.style.borderColor = 'var(--success-green)';
+    
+    const deadline = new Date(project.deadline);
+    const hoursLeft = Math.floor((deadline - new Date()) / (1000 * 60 * 60));
+    const daysLeft = Math.floor(hoursLeft / 24);
+    
+    card.innerHTML = `
+        <div class="apply-project-info">
+            <h4>${escapeHtml(project.title)}</h4>
+            <p style="color: var(--neutral-mid); margin: 8px 0;">
+                <span class="project-badge badge-${project.type}">${project.type}</span>
+                <span style="margin-left: 12px;">⏰ ${daysLeft}d ${hoursLeft % 24}h left</span>
+            </p>
+            <div style="background: var(--neutral-light); padding: 16px; border-radius: 8px; margin: 12px 0;">
+                <strong style="display: block; margin-bottom: 8px; color: var(--neutral-dark);">Full Description:</strong>
+                <p style="color: var(--neutral-mid); margin: 0; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(project.description || 'No description available')}</p>
+            </div>
+            <p style="color: var(--primary-blue); margin: 8px 0;">
+                🔗 <a href="${project.link}" target="_blank" style="color: var(--primary-blue);">${project.link}</a>
+            </p>
+            <p style="color: var(--success-green); font-weight: 700; font-size: 18px; margin: 8px 0;">+${project.xpReward} XP</p>
+            ${hasFeedback ? `
+                <p style="color: var(--success-green); font-weight: 600; margin: 8px 0;">
+                    ✅ Feedback submitted!
+                </p>
+            ` : ''}
+        </div>
+        ${hasFeedback ? `
+            <button class="btn-secondary" disabled>
+                ✅ Feedback Submitted
+            </button>
+        ` : `
+            <button class="btn-primary" onclick="window.openFeedbackModal('${project._id}')">
+                📝 Submit Feedback
+            </button>
+        `}
+    `;
+    
+    approvedSection.appendChild(card);
+}
         }
         
         // ✅ PENDING APPLICATIONS SECTION

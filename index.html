@@ -380,13 +380,8 @@
             <button type="submit" class="btn-primary">Submit Feedback</button>
         </form>
         <!-- Reviewer Profile Modal -->
-<div id="reviewerProfileModal" class="modal">
-    <div class="modal-content">
-        <span class="modal-close">&times;</span>
-        <h2>Reviewer Profile</h2>
-        <div id="reviewerProfileContent" class="loading">Loading profile...</div>
-    </div>
-</div>
+<!-- Reviewer Profile Modal -->
+
     </div>
 </div>
 
@@ -450,6 +445,12 @@ document.addEventListener('click', (e) => {
     }
 });
 </script>
+<div id="reviewerProfileModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:999999;align-items:center;justify-content:center;">
+    <div style="background:white;padding:40px;border-radius:16px;max-width:600px;width:90%;max-height:80vh;overflow-y:auto;position:relative;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+        <button onclick="document.getElementById('reviewerProfileModal').style.display='none'" style="position:absolute;top:16px;right:20px;font-size:32px;background:none;border:none;cursor:pointer;color:#666;line-height:1;padding:0;">&times;</button>
+        <div id="reviewerProfileContent"></div>
+    </div>
+</div>
 </body>
 </html>
 </body>
