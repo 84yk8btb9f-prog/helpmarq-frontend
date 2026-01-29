@@ -1,27 +1,8 @@
 {
-  "version": 2,
   "rewrites": [
     {
       "source": "/(.*)",
       "destination": "/index.html"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*\\.html)",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(.*\\.css)",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(.*\\.js)",
-      "dest": "/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
     }
   ]
 }
