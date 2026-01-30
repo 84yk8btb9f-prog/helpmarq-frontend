@@ -31,14 +31,22 @@
             </div>
         </div>
     </div>
+
 <script type="module">
+    // ✅ FIX: Dynamic API URL detection
+    const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3000/api'
+        : 'https://helpmarq-backend.onrender.com/api';
+    
+    console.log('🔗 Using API URL:', API_URL);
+    
     // Check if coming from email verification
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
     
     if (token) {
-        // Verify the token with backend
-        fetch(`http://localhost:3000/api/auth/verify-email?token=${token}`, {
+        // ✅ FIX: Use dynamic API_URL instead of hardcoded localhost
+        fetch(`${API_URL}/auth/verify-email?token=${token}`, {
             method: 'GET',
             credentials: 'include'
         })
@@ -46,7 +54,6 @@
         .then(data => {
             if (data.success) {
                 console.log('✅ Email verified successfully');
-                // Show success message
                 alert('Email verified! Please select your role to continue.');
             } else {
                 console.error('❌ Verification failed:', data.error);
@@ -68,16 +75,17 @@
             window.location.href = 'login.html';
             return;
         }
+        
         const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('verified') === 'true') {
-        sessionStorage.setItem('justVerified', 'true');
-        console.log('User just verified email');
-    }
+        if (urlParams.get('verified') === 'true') {
+            sessionStorage.setItem('justVerified', 'true');
+            console.log('User just verified email');
+        }
 
         console.log('User on role select:', user);
 
-        // Check if role already exists in backend
-        const API_URL = window.location.hostname === 'localhost'
+        // ✅ FIX: Dynamic API URL
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
 
@@ -100,34 +108,31 @@
         // Owner role handler
         document.getElementById('ownerCard').addEventListener('click', async () => {
             console.log('Owner role selected');
-         try {
-        const user = await getCurrentUser();
-        const API_URL = window.location.hostname === 'localhost'
-            ? 'http://localhost:3000/api'
-            : 'https://helpmarq-backend.onrender.com/api';
-        
-        const welcomeResponse = await fetch(`${API_URL}/send-welcome-email`, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                email: user.email, 
-                name: user.name || user.email 
-            })
+            try {
+                const user = await getCurrentUser();
+                
+                const welcomeResponse = await fetch(`${API_URL}/send-welcome-email`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        email: user.email, 
+                        name: user.name || user.email 
+                    })
+                });
+                const welcomeResult = await welcomeResponse.json();
+                console.log('Welcome email result:', welcomeResult);
+            } catch (emailError) {
+                console.log('Welcome email error (non-blocking):', emailError);
+            }
+            
+            localStorage.setItem('userRole', 'owner');
+            sessionStorage.setItem('roleJustSelected', 'true');
+            sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+            
+            await new Promise(resolve => setTimeout(resolve, 100));
+            window.location.href = 'index.html';
         });
-        const welcomeResult = await welcomeResponse.json();
-        console.log('Welcome email result:', welcomeResult);
-    } catch (emailError) {
-        console.log('Welcome email error (non-blocking):', emailError);
-    }
-    
-    localStorage.setItem('userRole', 'owner');
-    sessionStorage.setItem('roleJustSelected', 'true');
-    sessionStorage.setItem('roleSelectionTime', Date.now().toString());
-    
-    await new Promise(resolve => setTimeout(resolve, 100));
-    window.location.href = 'index.html';
-});
 
         // Reviewer role handler
         document.getElementById('reviewerCard').addEventListener('click', async () => {
