@@ -19,132 +19,116 @@
                     <div class="role-icon">📊</div>
                     <h3>Project Owner</h3>
                     <p>Upload projects and get expert feedback</p>
-                    <button class="btn-primary">I'm a Project Owner</button>
+                    <button class="btn-primary" id="ownerBtn">I'm a Project Owner</button>
                 </div>
 
                 <div class="role-card" id="reviewerCard">
                     <div class="role-icon">⭐</div>
                     <h3>Reviewer</h3>
                     <p>Review projects and earn XP</p>
-                    <button class="btn-primary">I'm a Reviewer</button>
+                    <button class="btn-primary" id="reviewerBtn">I'm a Reviewer</button>
                 </div>
             </div>
+            
+            <div id="message" style="margin-top: 20px; text-align: center; color: #EF4444; font-weight: 600;"></div>
         </div>
     </div>
 
-<script type="module">
-    // ✅ FIX: Dynamic API URL detection
-    const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3000/api'
-        : 'https://helpmarq-backend.onrender.com/api';
-    
-    console.log('🔗 Using API URL:', API_URL);
-    
-    // Check if coming from email verification
-    const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    
-    if (token) {
-        // ✅ FIX: Use dynamic API_URL instead of hardcoded localhost
-        fetch(`${API_URL}/auth/verify-email?token=${token}`, {
-            method: 'GET',
-            credentials: 'include'
-        })
-        .then(res => res.json())
-        .then(data => {
-            if (data.success) {
-                console.log('✅ Email verified successfully');
-                alert('Email verified! Please select your role to continue.');
-            } else {
-                console.error('❌ Verification failed:', data.error);
-                alert('Verification failed. Please try again.');
-            }
-        })
-        .catch(error => {
-            console.error('Verification error:', error);
-        });
-    }
-</script>
+    <script type="module">
+        import { getCurrentUser } from './lib/auth.js';
 
-   <script type="module">
-    import { getCurrentUser } from './lib/auth.js';
-
-    window.addEventListener('load', async () => {
-        const user = await getCurrentUser();
-        if (!user) {
-            window.location.href = 'login.html';
-            return;
-        }
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.get('verified') === 'true') {
-            sessionStorage.setItem('justVerified', 'true');
-            console.log('User just verified email');
-        }
-
-        console.log('User on role select:', user);
-
-        // ✅ FIX: Dynamic API URL
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
 
-        try {
-            const response = await fetch(`${API_URL}/user/me`, {
-                credentials: 'include'
-            });
-            const result = await response.json();
-            
-            if (result.success && result.role) {
-                console.log('User already has role:', result.role);
-                localStorage.setItem('userRole', result.role);
-                window.location.href = 'index.html';
+        window.addEventListener('load', async () => {
+            const user = await getCurrentUser();
+            if (!user) {
+                window.location.href = 'login.html';
                 return;
             }
-        } catch (error) {
-            console.log('Could not check existing role:', error);
-        }
-
-        // Owner role handler
-        document.getElementById('ownerCard').addEventListener('click', async () => {
-            console.log('Owner role selected');
-            try {
-                const user = await getCurrentUser();
-                
-                const welcomeResponse = await fetch(`${API_URL}/send-welcome-email`, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        email: user.email, 
-                        name: user.name || user.email 
-                    })
-                });
-                const welcomeResult = await welcomeResponse.json();
-                console.log('Welcome email result:', welcomeResult);
-            } catch (emailError) {
-                console.log('Welcome email error (non-blocking):', emailError);
+            
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('verified') === 'true') {
+                sessionStorage.setItem('justVerified', 'true');
+                console.log('User just verified email');
             }
-            
-            localStorage.setItem('userRole', 'owner');
-            sessionStorage.setItem('roleJustSelected', 'true');
-            sessionStorage.setItem('roleSelectionTime', Date.now().toString());
-            
-            await new Promise(resolve => setTimeout(resolve, 100));
-            window.location.href = 'index.html';
-        });
 
-        // Reviewer role handler
-        document.getElementById('reviewerCard').addEventListener('click', async () => {
-            console.log('Reviewer role selected');
-            localStorage.setItem('userRole', 'reviewer');
-            sessionStorage.setItem('roleJustSelected', 'true');
-            sessionStorage.setItem('roleSelectionTime', Date.now().toString());
-            
-            await new Promise(resolve => setTimeout(resolve, 100));
-            window.location.href = 'create-reviewer.html';
+            console.log('User on role select:', user);
+
+            try {
+                const response = await fetch(`${API_URL}/user/me`, {
+                    credentials: 'include'
+                });
+                const result = await response.json();
+                
+                if (result.success && result.role) {
+                    console.log('User already has role:', result.role);
+                    localStorage.setItem('userRole', result.role);
+                    window.location.href = 'index.html';
+                    return;
+                }
+            } catch (error) {
+                console.log('Could not check existing role:', error);
+            }
+
+            // ✅ FIX: Owner role handler - now saves to database
+            const ownerBtn = document.getElementById('ownerBtn');
+            ownerBtn.addEventListener('click', async () => {
+                console.log('Owner role selected');
+                
+                ownerBtn.disabled = true;
+                ownerBtn.textContent = 'Setting up...';
+                
+                try {
+                    // ✅ NEW: Save role to database
+                    const response = await fetch(`${API_URL}/user/set-owner-role`, {
+                        method: 'POST',
+                        credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (!result.success) {
+                        throw new Error(result.error || 'Failed to set owner role');
+                    }
+                    
+                    console.log('✓ Owner role saved to database');
+                    
+                    localStorage.setItem('userRole', 'owner');
+                    sessionStorage.setItem('roleJustSelected', 'true');
+                    sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+                    
+                    ownerBtn.textContent = 'Redirecting...';
+                    
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    window.location.href = 'index.html';
+                    
+                } catch (error) {
+                    console.error('❌ Set owner role error:', error);
+                    document.getElementById('message').textContent = 'Error: ' + error.message;
+                    ownerBtn.disabled = false;
+                    ownerBtn.textContent = "I'm a Project Owner";
+                }
+            });
+
+            // Reviewer role handler
+            const reviewerBtn = document.getElementById('reviewerBtn');
+            reviewerBtn.addEventListener('click', async () => {
+                console.log('Reviewer role selected');
+                
+                reviewerBtn.disabled = true;
+                reviewerBtn.textContent = 'Redirecting...';
+                
+                localStorage.setItem('userRole', 'reviewer');
+                sessionStorage.setItem('roleJustSelected', 'true');
+                sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+                
+                await new Promise(resolve => setTimeout(resolve, 100));
+                window.location.href = 'create-reviewer.html';
+            });
         });
-    });
-</script>
+    </script>
 </body>
 </html>
