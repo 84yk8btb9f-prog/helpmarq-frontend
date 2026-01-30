@@ -49,16 +49,11 @@
     </div>
 
     <script type="module">
-    import { signIn, getSession } from './lib/auth.js';
+    import { signIn, checkUserRole } from './lib/auth.js';
 
     const form = document.getElementById('loginForm');
     const message = document.getElementById('message');
     const loginBtn = document.getElementById('loginBtn');
-
-    // ✅ FIX: API URL helper
-    const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3000/api'
-        : 'https://helpmarq-backend.onrender.com/api';
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
@@ -71,82 +66,85 @@
             const email = document.getElementById('email').value.trim();
             const password = document.getElementById('password').value;
 
-            console.log('🔐 Attempting login:', email);
-
-            // ✅ FIX: Sign in
+            console.log('=== LOGIN FLOW START ===');
+            console.log('🔐 Step 1: Sign in...');
+            
+            // ✅ FIX: Sign in and wait for response
             const result = await signIn(email, password);
-            console.log('✅ Login successful');
+            console.log('✅ Sign in completed:', result);
 
-            message.textContent = '✅ Login successful! Checking role...';
+            message.textContent = '✅ Login successful! Loading your profile...';
             message.className = 'message success';
             message.style.display = 'block';
+            loginBtn.textContent = 'Loading profile...';
 
-            // ✅ FIX: Wait for session to be fully established
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // ✅ FIX: Wait for session to fully establish (1.5 seconds)
+            console.log('⏳ Step 2: Waiting for session to establish...');
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
-            // ✅ FIX: Check for role with retry logic
-            let roleResult = null;
-            let attempts = 0;
-            const maxAttempts = 3;
-
-            while (attempts < maxAttempts && !roleResult) {
-                try {
-                    console.log(`Attempt ${attempts + 1}: Checking role...`);
-                    
-                    const roleResponse = await fetch(`${API_URL}/user/me`, {
-                        credentials: 'include',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        }
-                    });
-                    
-                    if (roleResponse.ok) {
-                        roleResult = await roleResponse.json();
-                        console.log('Role check result:', roleResult);
-                        break;
-                    } else if (roleResponse.status === 401) {
-                        console.log('401 - Session not ready, retrying...');
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                        attempts++;
-                    } else {
-                        throw new Error(`HTTP ${roleResponse.status}`);
-                    }
-                } catch (error) {
-                    console.error('Role check error:', error);
-                    attempts++;
-                    if (attempts < maxAttempts) {
-                        await new Promise(resolve => setTimeout(resolve, 500));
-                    }
-                }
-            }
+            // ✅ FIX: Check role with retry logic (up to 5 attempts over 5 seconds)
+            console.log('🔍 Step 3: Checking user role...');
+            const roleResult = await checkUserRole(5);
             
-            // ✅ FIX: Handle role result
+            console.log('Role check complete:', roleResult);
+            
+            // ✅ FIX: Handle role result properly
             if (roleResult && roleResult.success) {
                 if (roleResult.role === 'reviewer') {
+                    console.log('✅ REVIEWER role confirmed');
                     localStorage.setItem('userRole', 'reviewer');
                     localStorage.setItem('reviewerId', roleResult.data._id);
-                    console.log('✓ REVIEWER role - redirecting to dashboard');
-                    window.location.href = 'index.html';
+                    
+                    message.textContent = '✅ Welcome back, Reviewer! Redirecting...';
+                    loginBtn.textContent = 'Redirecting...';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 500);
+                    
                 } else if (roleResult.role === 'owner') {
+                    console.log('✅ OWNER role confirmed');
                     localStorage.setItem('userRole', 'owner');
-                    console.log('✓ OWNER role - redirecting to dashboard');
-                    window.location.href = 'index.html';
-                } else {
-                    // No role yet
-                    console.log('→ No role - redirecting to role selection');
+                    
+                    message.textContent = '✅ Welcome back, Project Owner! Redirecting...';
+                    loginBtn.textContent = 'Redirecting...';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 500);
+                    
+                } else if (roleResult.role === null) {
+                    console.log('ℹ️ No role set - redirecting to role selection');
                     localStorage.removeItem('userRole');
-                    window.location.href = 'role-select.html';
+                    
+                    message.textContent = '✅ Please select your role...';
+                    loginBtn.textContent = 'Redirecting...';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'role-select.html';
+                    }, 500);
                 }
             } else {
-                // ✅ FIX: Fallback if role check failed after retries
-                console.log('Could not verify role after retries, checking localStorage');
+                // ✅ FIX: Fallback to localStorage if role check failed
+                console.log('⚠️  Role check failed, checking localStorage...');
                 const storedRole = localStorage.getItem('userRole');
+                
                 if (storedRole) {
-                    console.log('Using stored role:', storedRole);
-                    window.location.href = 'index.html';
+                    console.log('✓ Found stored role:', storedRole);
+                    message.textContent = '✅ Login successful! Redirecting...';
+                    loginBtn.textContent = 'Redirecting...';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'index.html';
+                    }, 500);
                 } else {
-                    console.log('No stored role, going to role selection');
-                    window.location.href = 'role-select.html';
+                    console.log('⚠️  No stored role, redirecting to role selection');
+                    message.textContent = '✅ Please select your role...';
+                    loginBtn.textContent = 'Redirecting...';
+                    
+                    setTimeout(() => {
+                        window.location.href = 'role-select.html';
+                    }, 500);
                 }
             }
 
@@ -155,10 +153,15 @@
             
             let errorMessage = error.message;
             
+            // ✅ FIX: Better error messages
             if (error.message.includes('Invalid email or password')) {
                 errorMessage = 'Email or password incorrect. Did you verify your email after signup?';
             } else if (error.message.includes('401')) {
-                errorMessage = 'Login failed. Make sure you verified your email after signup.';
+                errorMessage = 'Login failed. Please make sure you verified your email.';
+            } else if (error.message.includes('Network') || error.message.includes('fetch')) {
+                errorMessage = 'Cannot connect to server. Please check your internet connection.';
+            } else if (error.message.includes('CORS')) {
+                errorMessage = 'Connection blocked. Please try again in a few moments.';
             }
             
             message.textContent = '❌ ' + errorMessage;
