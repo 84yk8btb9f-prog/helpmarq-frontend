@@ -160,6 +160,13 @@
     </div>
     
     <script type="module">
+        // ✅ FIX: Proper API URL detection
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
+        
+        console.log('🔗 Using API URL:', API_URL);
+        
         const email = localStorage.getItem('pendingVerificationEmail');
         
         if (!email) {
@@ -206,52 +213,39 @@
             }
             
             try {
-                const res = await fetch('http://localhost:3000/api/verify-otp', {
+                console.log('📨 Verifying OTP...');
+                console.log('Email:', email);
+                console.log('Code:', code);
+                console.log('API URL:', `${API_URL}/verify-otp`);
+                
+                const res = await fetch(`${API_URL}/verify-otp`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify({ email, code })
                 });
                 
-                const data = await res.json();
+                console.log('Response status:', res.status);
                 
-               if (data.success) {
-    showSuccess('✓ Email verified! Redirecting...');
-    localStorage.removeItem('pendingVerificationEmail');
-    
-    // Check if user already has session/role
-    try {
-        const { getSession } = await import('./lib/auth.js');
-        const session = await getSession();
-        
-        if (session && session.user) {
-            // User is logged in
-            if (session.user.role) {
-                // Already has role, skip role selection
-                if (session.user.role === 'owner') {
-                    window.location.href = '/owner-dashboard.html';
+                const data = await res.json();
+                console.log('Response data:', data);
+                
+                if (data.success) {
+                    showSuccess('✓ Email verified! Redirecting...');
+                    localStorage.removeItem('pendingVerificationEmail');
+                    
+                    setTimeout(() => {
+                        window.location.href = '/role-select.html';
+                    }, 1500);
                 } else {
-                    window.location.href = '/reviewer-projects.html';
-                }
-            } else {
-                // No role yet, show role selection
-                window.location.href = '/role-select.html';
-            }
-        } else {
-            // Not logged in, send to role select
-            window.location.href = '/role-select.html';
-        }
-    } catch (error) {
-        // Fallback to role select
-        window.location.href = '/role-select.html';
-    }
-} else {
                     showError(data.error || 'Invalid code');
                     // Clear inputs
                     inputs.forEach(input => input.value = '');
                     inputs[0].focus();
                 }
             } catch (error) {
-                showError('Verification failed. Try again.');
+                console.error('❌ Verification error:', error);
+                showError('Verification failed. Please try again.');
             }
         });
         
