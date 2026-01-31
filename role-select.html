@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Choose Your Role - HelpMarq</title>
     <link rel="stylesheet" href="style.css">
-    <script>
-      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
     <div class="auth-container">
@@ -23,43 +19,40 @@
                     <div class="role-icon">📊</div>
                     <h3>Project Owner</h3>
                     <p>Upload projects and get expert feedback</p>
-                    <button class="btn-primary" id="ownerBtn">I'm a Project Owner</button>
+                    <button class="btn-primary">I'm a Project Owner</button>
                 </div>
 
                 <div class="role-card" id="reviewerCard">
                     <div class="role-icon">⭐</div>
                     <h3>Reviewer</h3>
                     <p>Review projects and earn XP</p>
-                    <button class="btn-primary" id="reviewerBtn">I'm a Reviewer</button>
+                    <button class="btn-primary">I'm a Reviewer</button>
                 </div>
             </div>
-            
-            <div id="message" style="margin-top: 20px; text-align: center; color: #EF4444; font-weight: 600;"></div>
         </div>
     </div>
 
     <script type="module">
         import { getCurrentUser } from './lib/auth.js';
 
-        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-            ? 'http://localhost:3000/api'
-            : 'https://helpmarq-backend.onrender.com/api';
-
         window.addEventListener('load', async () => {
+            // ✅ FIX 1: Check if user just verified email
+            const justVerified = sessionStorage.getItem('justVerified');
+            console.log('Just verified:', justVerified);
+            
             const user = await getCurrentUser();
             if (!user) {
                 window.location.href = 'login.html';
                 return;
             }
             
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('verified') === 'true') {
-                sessionStorage.setItem('justVerified', 'true');
-                console.log('User just verified email');
-            }
-
             console.log('User on role select:', user);
 
+            const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                ? 'http://localhost:3000/api'
+                : 'https://helpmarq-backend.onrender.com/api';
+
+            // Check if user already has a role
             try {
                 const response = await fetch(`${API_URL}/user/me`, {
                     credentials: 'include'
@@ -76,16 +69,12 @@
                 console.log('Could not check existing role:', error);
             }
 
-            // ✅ FIX: Owner role handler - now saves to database
-            const ownerBtn = document.getElementById('ownerBtn');
-            ownerBtn.addEventListener('click', async () => {
+            // Owner role handler
+            document.getElementById('ownerCard').addEventListener('click', async () => {
                 console.log('Owner role selected');
                 
-                ownerBtn.disabled = true;
-                ownerBtn.textContent = 'Setting up...';
-                
                 try {
-                    // ✅ NEW: Save role to database
+                    // ✅ FIX 1: Call backend to set owner role in database
                     const response = await fetch(`${API_URL}/user/set-owner-role`, {
                         method: 'POST',
                         credentials: 'include',
@@ -93,41 +82,31 @@
                     });
                     
                     const result = await response.json();
+                    console.log('Set owner role result:', result);
                     
                     if (!result.success) {
-                        throw new Error(result.error || 'Failed to set owner role');
+                        throw new Error(result.error || 'Failed to set role');
                     }
-                    
-                    console.log('✓ Owner role saved to database');
                     
                     localStorage.setItem('userRole', 'owner');
                     sessionStorage.setItem('roleJustSelected', 'true');
-                    sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+                    sessionStorage.removeItem('justVerified');
                     
-                    ownerBtn.textContent = 'Redirecting...';
-                    
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     window.location.href = 'index.html';
                     
                 } catch (error) {
-                    console.error('❌ Set owner role error:', error);
-                    document.getElementById('message').textContent = 'Error: ' + error.message;
-                    ownerBtn.disabled = false;
-                    ownerBtn.textContent = "I'm a Project Owner";
+                    console.error('Error setting owner role:', error);
+                    alert('Failed to set role. Please try again.');
                 }
             });
 
             // Reviewer role handler
-            const reviewerBtn = document.getElementById('reviewerBtn');
-            reviewerBtn.addEventListener('click', async () => {
+            document.getElementById('reviewerCard').addEventListener('click', async () => {
                 console.log('Reviewer role selected');
-                
-                reviewerBtn.disabled = true;
-                reviewerBtn.textContent = 'Redirecting...';
-                
                 localStorage.setItem('userRole', 'reviewer');
                 sessionStorage.setItem('roleJustSelected', 'true');
-                sessionStorage.setItem('roleSelectionTime', Date.now().toString());
+                sessionStorage.removeItem('justVerified');
                 
                 await new Promise(resolve => setTimeout(resolve, 100));
                 window.location.href = 'create-reviewer.html';

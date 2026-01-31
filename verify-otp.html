@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verify Email - HelpMarq</title>
     <link rel="stylesheet" href="style.css">
-    <script>
-      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/insights/script.js"></script>
     <style>
         .verify-container {
             min-height: 100vh;
@@ -164,7 +160,6 @@
     </div>
     
     <script type="module">
-        // ✅ FIX: Proper API URL detection
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
@@ -238,12 +233,15 @@
                     showSuccess('✓ Email verified! Redirecting...');
                     localStorage.removeItem('pendingVerificationEmail');
                     
+                    // ✅ FIX 1 & 2: Set session verified flag for auto-login
+                    sessionStorage.setItem('justVerified', 'true');
+                    sessionStorage.setItem('verificationTimestamp', Date.now().toString());
+                    
                     setTimeout(() => {
                         window.location.href = '/role-select.html';
                     }, 1500);
                 } else {
                     showError(data.error || 'Invalid code');
-                    // Clear inputs
                     inputs.forEach(input => input.value = '');
                     inputs[0].focus();
                 }
@@ -272,8 +270,6 @@
                     canResend = true;
                 }
             }, 1000);
-            
-            // TODO: Actually trigger resend via API
         });
         
         function showError(msg) {

@@ -5,10 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign Up - HelpMarq</title>
     <link rel="stylesheet" href="style.css">
-    <script>
-      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
-    </script>
-    <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
     <div class="auth-container">
@@ -127,8 +123,10 @@
                 const result = JSON.parse(responseText);
                 console.log('Signup success:', result);
 
-                // Store email for OTP verification
+                // ✅ FIX 1: Store signup session data for auto-login flow
                 localStorage.setItem('pendingVerificationEmail', email);
+                sessionStorage.setItem('justSignedUp', 'true');
+                sessionStorage.setItem('signupTimestamp', Date.now().toString());
                 
                 // Redirect to OTP page
                 window.location.href = '/verify-otp.html';

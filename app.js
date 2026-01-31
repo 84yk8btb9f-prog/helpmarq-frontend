@@ -211,6 +211,10 @@ function setupEventListeners() {
     if (uploadForm) {
         uploadForm.addEventListener('submit', handleUploadProject);
     }
+    const editProjectForm = document.getElementById('editProjectForm');
+if (editProjectForm) {
+    editProjectForm.addEventListener('submit', handleEditProjectSubmit);
+}
 
     // Filters
     const filterType = document.getElementById('filterType');
@@ -815,7 +819,6 @@ window.rejectApplication = async function(applicationId) {
     }
 };
 
-// ✅ FIXED: Display projects with null-safe descriptions
 function displayProjects(projects, containerId = 'projectsGrid') {
     const container = document.getElementById(containerId);
     if (!container) return;
@@ -860,6 +863,12 @@ function displayProjects(projects, containerId = 'projectsGrid') {
                     </button>
                     <button class="btn-secondary btn-small" onclick="window.openFeedbackListModal('${project._id}'); document.getElementById('feedbackListModal').dataset.projectId='${project._id}'">
                         💬 Feedback (${project.reviewsCount})
+                    </button>
+                    <button class="btn-secondary btn-small" onclick="window.editProject('${project._id}')">
+                        ✏️ Edit
+                    </button>
+                    <button class="btn-danger btn-small" onclick="window.deleteProject('${project._id}')">
+                        🗑️ Delete
                     </button>
                 </div>
             `;
@@ -1481,6 +1490,163 @@ window.openFeedbackModal = async function(projectId) {
     } catch (error) {
         console.error('Open feedback modal error:', error);
         showError('Failed to open feedback form: ' + error.message);
+    }
+};
+// ✅ EDIT PROJECT FUNCTION
+window.editProject = async function(projectId) {
+    try {
+        console.log('Opening edit modal for project:', projectId);
+        
+        // Fetch current project data
+        const response = await fetch(`${API_URL}/projects/${projectId}`, {
+            credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch project');
+        
+        const result = await response.json();
+        if (!result.success) throw new Error(result.error);
+        
+        const project = result.data;
+        
+        // Open edit modal
+        const modal = document.getElementById('editProjectModal');
+        if (!modal) {
+            console.error('Edit modal not found');
+            return;
+        }
+        
+        // Populate form with current data
+        document.getElementById('editTitle').value = project.title;
+        document.getElementById('editDescription').value = project.description;
+        document.getElementById('editType').value = project.type;
+        document.getElementById('editLink').value = project.link;
+        document.getElementById('editXpReward').value = project.xpReward;
+        document.getElementById('editReviewersNeeded').value = project.reviewersNeeded || 2;
+        
+        // Format deadline for datetime-local input
+        const deadlineDate = new Date(project.deadline);
+        const formattedDeadline = deadlineDate.toISOString().slice(0, 16);
+        document.getElementById('editDeadline').value = formattedDeadline;
+        
+        // Store project ID in modal dataset
+        modal.dataset.projectId = projectId;
+        
+        // Show modal
+        modal.classList.add('active');
+        
+    } catch (error) {
+        console.error('Edit project error:', error);
+        showError('Failed to load project for editing: ' + error.message);
+    }
+};
+
+// ✅ SAVE EDITED PROJECT
+async function handleEditProjectSubmit(e) {
+    e.preventDefault();
+    
+    const modal = document.getElementById('editProjectModal');
+    const projectId = modal.dataset.projectId;
+    
+    if (!projectId) {
+        showError('No project ID found');
+        return;
+    }
+    
+    const submitBtn = e.target.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Saving...';
+    
+    try {
+        const deadlineValue = document.getElementById('editDeadline').value;
+        const deadline = new Date(deadlineValue);
+        
+        if (deadline <= new Date()) {
+            throw new Error('Deadline must be in the future');
+        }
+        
+        const updateData = {
+            title: document.getElementById('editTitle').value.trim(),
+            description: document.getElementById('editDescription').value.trim(),
+            type: document.getElementById('editType').value,
+            link: document.getElementById('editLink').value.trim(),
+            xpReward: parseInt(document.getElementById('editXpReward').value),
+            reviewersNeeded: parseInt(document.getElementById('editReviewersNeeded').value),
+            deadline: deadline.toISOString()
+        };
+        
+        console.log('Updating project:', projectId, updateData);
+        
+        const response = await fetch(`${API_URL}/projects/${projectId}`, {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData)
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        
+        if (!result.success) throw new Error(result.error);
+        
+        showSuccess('✅ Project updated successfully!');
+        closeModals();
+        
+        // Reload dashboard
+        if (document.getElementById('dashboard-tab').classList.contains('active')) {
+            loadDashboard();
+        } else {
+            loadProjects();
+        }
+        
+    } catch (error) {
+        console.error('Update project error:', error);
+        showError('Failed to update project: ' + error.message);
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Save Changes';
+    }
+}
+
+// ✅ DELETE PROJECT FUNCTION
+window.deleteProject = async function(projectId) {
+    if (!confirm('⚠️ Delete this project?\n\nThis action cannot be undone.\n\nNote: Projects with approved reviewers cannot be deleted.')) {
+        return;
+    }
+    
+    try {
+        console.log('Deleting project:', projectId);
+        
+        const response = await fetch(`${API_URL}/projects/${projectId}`, {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        
+        if (!result.success) throw new Error(result.error);
+        
+        showSuccess('✅ Project deleted successfully');
+        
+        // Reload dashboard
+        if (document.getElementById('dashboard-tab').classList.contains('active')) {
+            loadDashboard();
+        } else {
+            loadProjects();
+        }
+        
+    } catch (error) {
+        console.error('Delete project error:', error);
+        
+        // Show user-friendly error message
+        if (error.message.includes('approved reviewers')) {
+            showError('Cannot delete project: It has approved reviewers. Please complete the review process first.');
+        } else {
+            showError('Failed to delete project: ' + error.message);
+        }
     }
 };
 
