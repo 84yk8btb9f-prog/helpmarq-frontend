@@ -160,6 +160,8 @@
     </div>
     
     <script type="module">
+        import { getCurrentUser } from './lib/auth.js';
+        
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
@@ -215,7 +217,6 @@
                 console.log('📨 Verifying OTP...');
                 console.log('Email:', email);
                 console.log('Code:', code);
-                console.log('API URL:', `${API_URL}/verify-otp`);
                 
                 const res = await fetch(`${API_URL}/verify-otp`, {
                     method: 'POST',
@@ -230,16 +231,59 @@
                 console.log('Response data:', data);
                 
                 if (data.success) {
-                    showSuccess('✓ Email verified! Redirecting...');
+                    showSuccess('✓ Email verified! Setting up your account...');
                     localStorage.removeItem('pendingVerificationEmail');
                     
-                    // ✅ FIX 1 & 2: Set session verified flag for auto-login
-                    sessionStorage.setItem('justVerified', 'true');
-                    sessionStorage.setItem('verificationTimestamp', Date.now().toString());
+                    // ✅ FIX: Wait for session to fully establish
+                    await new Promise(resolve => setTimeout(resolve, 2000));
                     
-                    setTimeout(() => {
-                        window.location.href = '/role-select.html';
-                    }, 1500);
+                    // ✅ FIX: Check if this user already has a role
+                    console.log('🔍 Checking user role...');
+                    
+                    try {
+                        const user = await getCurrentUser();
+                        console.log('Current user:', user);
+                        
+                        const roleResponse = await fetch(`${API_URL}/user/me`, {
+                            credentials: 'include'
+                        });
+                        
+                        const roleData = await roleResponse.json();
+                        console.log('Role check result:', roleData);
+                        
+                        if (roleData.success && roleData.role) {
+                            // ✅ Existing user with role - go to dashboard
+                            console.log('✓ User has existing role:', roleData.role);
+                            localStorage.setItem('userRole', roleData.role);
+                            
+                            if (roleData.role === 'reviewer' && roleData.data?._id) {
+                                localStorage.setItem('reviewerId', roleData.data._id);
+                            }
+                            
+                            showSuccess('✓ Welcome back! Redirecting to dashboard...');
+                            setTimeout(() => {
+                                window.location.href = '/index.html';
+                            }, 1000);
+                        } else {
+                            // ✅ New user - needs to select role
+                            console.log('→ New user, redirecting to role selection');
+                            sessionStorage.setItem('justVerified', 'true');
+                            
+                            showSuccess('✓ Verified! Please select your role...');
+                            setTimeout(() => {
+                                window.location.href = '/role-select.html';
+                            }, 1000);
+                        }
+                        
+                    } catch (roleError) {
+                        console.error('Role check error:', roleError);
+                        // Default to role selection if check fails
+                        sessionStorage.setItem('justVerified', 'true');
+                        setTimeout(() => {
+                            window.location.href = '/role-select.html';
+                        }, 1000);
+                    }
+                    
                 } else {
                     showError(data.error || 'Invalid code');
                     inputs.forEach(input => input.value = '');

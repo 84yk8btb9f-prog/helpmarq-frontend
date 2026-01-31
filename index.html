@@ -455,6 +455,120 @@ document.addEventListener('click', (e) => {
         <div id="reviewerProfileContent"></div>
     </div>
 </div>
+<!-- ============================================
+     INSTRUCTIONS:
+     1. Open your index.html
+     2. Find the line with: </div> <!-- container end -->
+     3. BEFORE the closing </body> tag, add this entire section
+     ============================================ -->
+
+<!-- Edit Project Modal -->
+<div id="editProjectModal" class="modal">
+    <div class="modal-content">
+        <span class="modal-close">&times;</span>
+        <h2>Edit Project</h2>
+        
+        <form id="editProjectForm" class="form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="editTitle">Project Title *</label>
+                    <input
+                        type="text"
+                        id="editTitle"
+                        placeholder="e.g., My SaaS Landing Page"
+                        required
+                        minlength="5"
+                        maxlength="100"
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="editType">Project Type *</label>
+                    <select id="editType" required>
+                        <option value="">Select type...</option>
+                        <option value="website">Website</option>
+                        <option value="app">Mobile App</option>
+                        <option value="design">Design</option>
+                        <option value="pitch">Pitch Deck</option>
+                        <option value="business">Business Idea</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="editDescription">Description *</label>
+                <textarea
+                    id="editDescription"
+                    rows="4"
+                    placeholder="Describe what feedback you're looking for..."
+                    required
+                    minlength="20"
+                    maxlength="500"
+                ></textarea>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="editLink">Project Link *</label>
+                    <input
+                        type="url"
+                        id="editLink"
+                        placeholder="https://example.com"
+                        required
+                    >
+                </div>
+
+                <div class="form-group">
+                    <label for="editXpReward">XP Reward *</label>
+                    <input
+                        type="number"
+                        id="editXpReward"
+                        min="50"
+                        max="500"
+                        placeholder="100"
+                        required
+                    >
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="editReviewersNeeded">Reviewers Needed *</label>
+                    <select id="editReviewersNeeded" required>
+                        <option value="1">1 Reviewer</option>
+                        <option value="2">2 Reviewers (Recommended)</option>
+                        <option value="3">3 Reviewers</option>
+                        <option value="4">4 Reviewers</option>
+                        <option value="5">5 Reviewers</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="editDeadline">Review Deadline *</label>
+                    <input
+                        type="datetime-local"
+                        id="editDeadline"
+                        required
+                    >
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: 24px;">
+                <button type="submit" class="btn-primary" style="flex: 1;">
+                    Save Changes
+                </button>
+                <button type="button" class="btn-secondary" style="flex: 1;" onclick="closeModals()">
+                    Cancel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
 </body>
 </html>
 </body>
