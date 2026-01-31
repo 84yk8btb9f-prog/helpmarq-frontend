@@ -520,5 +520,56 @@ document.addEventListener('click', (e) => {
 </div>
 
 <script type="module" src="app.js"></script>
+<!-- UserJot Feedback Widget -->
+<script>
+  window.userjot_config = {
+    project_id: "cml2ez9i514pc16mlqaflk90e",  // ⚠️ REPLACE WITH YOUR ACTUAL PROJECT ID FROM USERJOT DASHBOARD
+    position: "bottom-right",  // Options: bottom-right, bottom-left, top-right, top-left
+    color: "#2563EB",  // Matches your brand blue
+    launcher_text: "Feedback",  // Button text
+    greeting_title: "We'd love your feedback!", // Popup title
+    greeting_message: "Help us improve HelpMarq by sharing your thoughts.", // Popup message
+  };
+  
+  (function() {
+    var w = window;
+    var d = document;
+    var s = d.createElement('script');
+    s.src = 'https://widget.userjot.com/widget.js';
+    s.async = true;
+    d.getElementsByTagName('head')[0].appendChild(s);
+    w.userjot = w.userjot || function() { (w.userjot.q = w.userjot.q || []).push(arguments); };
+  })();
+</script>
+
+<!-- ✅ OPTIONAL: User Identification for Better Tracking -->
+<!-- This identifies logged-in users in UserJot -->
+<!-- Add this AFTER the UserJot widget code -->
+<script type="module">
+  import { getCurrentUser } from './lib/auth.js';
+  
+  window.addEventListener('load', async () => {
+    try {
+      const user = await getCurrentUser();
+      
+      if (user && window.userjot) {
+        // Identify the user to UserJot
+        window.userjot('identify', {
+          userId: user.id,
+          email: user.email,
+          name: user.name || user.email,
+          // Additional metadata
+          role: localStorage.getItem('userRole') || 'unknown',
+          createdAt: new Date().toISOString()
+        });
+        
+        console.log('✅ UserJot: User identified');
+      }
+    } catch (error) {
+      console.error('UserJot identification error:', error);
+    }
+  });
+</script>
+
 </body>
 </html>

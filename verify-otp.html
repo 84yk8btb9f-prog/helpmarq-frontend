@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Verify Email - HelpMarq</title>
     <link rel="stylesheet" href="style.css">
+    
+    <!-- ✅ VERCEL ANALYTICS -->
+    <script>
+      window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
+    </script>
+    <script defer src="/_vercel/insights/script.js"></script>
+    
     <style>
         .verify-container {
             min-height: 100vh;
@@ -80,9 +87,14 @@
             margin-top: 24px;
         }
         
-        .verify-button:hover {
+        .verify-button:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 8px 16px rgba(37, 99, 235, 0.3);
+        }
+        
+        .verify-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
         
         .resend-button {
@@ -99,8 +111,13 @@
             margin-top: 12px;
         }
         
-        .resend-button:hover {
+        .resend-button:hover:not(:disabled) {
             background: #EFF6FF;
+        }
+        
+        .resend-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
         
         .error-message {
@@ -151,7 +168,7 @@
                 <div id="error-message" class="error-message"></div>
                 <div id="success-message" class="success-message"></div>
                 
-                <button type="submit" class="verify-button">Verify Code</button>
+                <button type="submit" class="verify-button" id="verify-btn">Verify Code</button>
                 <button type="button" id="resend-btn" class="resend-button">Resend Code</button>
                 
                 <div class="timer" id="timer"></div>
@@ -160,6 +177,8 @@
     </div>
     
     <script type="module">
+        import { signIn } from './lib/auth.js';
+        
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
@@ -167,10 +186,11 @@
         const email = localStorage.getItem('pendingVerificationEmail');
         
         if (!email) {
+            console.log('No pending email, redirecting to signup');
             window.location.href = '/signup.html';
         }
         
-        // OTP input auto-focus
+        // OTP input auto-focus and auto-submit
         const inputs = document.querySelectorAll('.otp-input');
         inputs.forEach((input, index) => {
             input.addEventListener('input', (e) => {
@@ -178,8 +198,11 @@
                 if (value.length === 1 && index < 5) {
                     inputs[index + 1].focus();
                 }
+                // Auto-submit when last digit entered
                 if (index === 5 && value.length === 1) {
-                    document.getElementById('otp-form').dispatchEvent(new Event('submit'));
+                    setTimeout(() => {
+                        document.getElementById('otp-form').dispatchEvent(new Event('submit'));
+                    }, 200);
                 }
             });
             
@@ -196,66 +219,154 @@
             });
         });
         
-        // Submit OTP
+        // ✅ FIXED: Submit OTP with auto-login
         document.getElementById('otp-form').addEventListener('submit', async (e) => {
             e.preventDefault();
+            
+            const verifyBtn = document.getElementById('verify-btn');
+            verifyBtn.disabled = true;
+            verifyBtn.textContent = 'Verifying...';
             
             const code = Array.from(inputs).map(input => input.value).join('');
             
             if (code.length !== 6) {
                 showError('Please enter all 6 digits');
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Verify Code';
                 return;
             }
             
             try {
+                console.log('=== OTP VERIFICATION START ===');
+                console.log('Email:', email);
+                console.log('Code:', code);
+                
+                // ✅ FIX: Get stored signup password for auto-login
+                const tempPassword = sessionStorage.getItem('tempSignupPassword');
+                console.log('Temp password available:', !!tempPassword);
+                
+                // Step 1: Verify OTP
                 const res = await fetch(`${API_URL}/verify-otp`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
-                    body: JSON.stringify({ email, code })
+                    body: JSON.stringify({ 
+                        email, 
+                        code,
+                        password: tempPassword  // ✅ Include password for backend auto-login
+                    })
                 });
                 
                 const data = await res.json();
+                console.log('OTP verification response:', data);
                 
-                if (data.success) {
-                    showSuccess('✓ Email verified! Choose your role...');
-                    localStorage.removeItem('pendingVerificationEmail');
+                if (!data.success) {
+                    throw new Error(data.error || 'Invalid code');
+                }
+                
+                // ✅ Step 2: Auto-login if password available
+                if (tempPassword) {
+                    console.log('🔐 Auto-login after verification...');
+                    verifyBtn.textContent = 'Logging in...';
                     
-                    // ✅ FIXED: Go directly to role selection after OTP
-                    sessionStorage.setItem('justVerified', 'true');
+                    try {
+                        await signIn(email, tempPassword);
+                        console.log('✅ Auto-login successful');
+                        
+                        // Clear temporary credentials
+                        sessionStorage.removeItem('tempSignupPassword');
+                        sessionStorage.removeItem('tempSignupEmail');
+                        localStorage.removeItem('pendingVerificationEmail');
+                        
+                        showSuccess('✅ Email verified! Choose your role...');
+                        sessionStorage.setItem('justVerified', 'true');
+                        
+                        verifyBtn.textContent = 'Redirecting...';
+                        
+                        // Wait a bit for session to fully establish
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        
+                        window.location.href = '/role-select.html';
+                        
+                    } catch (loginError) {
+                        console.error('❌ Auto-login failed:', loginError);
+                        
+                        // If auto-login fails, redirect to login page
+                        showSuccess('✅ Email verified! Please log in...');
+                        
+                        setTimeout(() => {
+                            window.location.href = '/login.html';
+                        }, 2000);
+                    }
+                } else {
+                    // No password stored - direct to login
+                    console.log('⚠️  No password for auto-login, redirecting to login');
+                    
+                    localStorage.removeItem('pendingVerificationEmail');
+                    showSuccess('✅ Email verified! Please log in...');
                     
                     setTimeout(() => {
-                        window.location.href = '/role-select.html';
-                    }, 1500);
-                } else {
-                    showError(data.error || 'Invalid code');
-                    inputs.forEach(input => input.value = '');
-                    inputs[0].focus();
+                        window.location.href = '/login.html';
+                    }, 2000);
                 }
+                
             } catch (error) {
-                console.error('Verification error:', error);
-                showError('Verification failed. Please try again.');
+                console.error('❌ Verification error:', error);
+                showError(error.message || 'Verification failed. Please try again.');
+                
+                // Clear inputs and reset
+                inputs.forEach(input => input.value = '');
+                inputs[0].focus();
+                
+                verifyBtn.disabled = false;
+                verifyBtn.textContent = 'Verify Code';
             }
         });
         
-        // Resend code
+        // Resend code with cooldown
         let canResend = true;
+        let cooldownSeconds = 0;
+        
         document.getElementById('resend-btn').addEventListener('click', async () => {
             if (!canResend) return;
             
-            canResend = false;
-            showSuccess('New code sent to your email');
+            const resendBtn = document.getElementById('resend-btn');
+            resendBtn.disabled = true;
             
-            let seconds = 60;
-            const interval = setInterval(() => {
-                document.getElementById('timer').textContent = `Resend available in ${seconds}s`;
-                seconds--;
-                if (seconds < 0) {
-                    clearInterval(interval);
-                    document.getElementById('timer').textContent = '';
-                    canResend = true;
+            try {
+                // Call resend OTP API (you'll need to implement this endpoint)
+                const res = await fetch(`${API_URL}/resend-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                if (res.ok) {
+                    showSuccess('✅ New code sent to your email');
+                    
+                    // Start 60 second cooldown
+                    canResend = false;
+                    cooldownSeconds = 60;
+                    
+                    const interval = setInterval(() => {
+                        document.getElementById('timer').textContent = `Resend available in ${cooldownSeconds}s`;
+                        cooldownSeconds--;
+                        
+                        if (cooldownSeconds < 0) {
+                            clearInterval(interval);
+                            document.getElementById('timer').textContent = '';
+                            canResend = true;
+                            resendBtn.disabled = false;
+                        }
+                    }, 1000);
+                } else {
+                    throw new Error('Failed to resend code');
                 }
-            }, 1000);
+            } catch (error) {
+                console.error('Resend error:', error);
+                showError('Failed to resend code. Please try again.');
+                resendBtn.disabled = false;
+            }
         });
         
         function showError(msg) {
@@ -271,6 +382,8 @@
             el.style.display = 'block';
             document.getElementById('error-message').style.display = 'none';
         }
+        
+        console.log('✓ OTP verification page ready');
     </script>
 </body>
 </html>
