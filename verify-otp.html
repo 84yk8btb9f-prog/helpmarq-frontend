@@ -160,8 +160,7 @@
     </div>
     
     <script type="module">
-        import { getCurrentUser } from './lib/auth.js';
-        
+        // ✅ SAFE VERSION - No auth calls, just verify OTP and redirect to login
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
@@ -182,7 +181,6 @@
                 if (value.length === 1 && index < 5) {
                     inputs[index + 1].focus();
                 }
-                // Auto-submit when all 6 digits entered
                 if (index === 5 && value.length === 1) {
                     document.getElementById('otp-form').dispatchEvent(new Event('submit'));
                 }
@@ -194,7 +192,6 @@
                 }
             });
             
-            // Only allow numbers
             input.addEventListener('keypress', (e) => {
                 if (!/[0-9]/.test(e.key)) {
                     e.preventDefault();
@@ -215,8 +212,6 @@
             
             try {
                 console.log('📨 Verifying OTP...');
-                console.log('Email:', email);
-                console.log('Code:', code);
                 
                 const res = await fetch(`${API_URL}/verify-otp`, {
                     method: 'POST',
@@ -225,65 +220,20 @@
                     body: JSON.stringify({ email, code })
                 });
                 
-                console.log('Response status:', res.status);
-                
                 const data = await res.json();
-                console.log('Response data:', data);
+                console.log('Response:', data);
                 
                 if (data.success) {
-                    showSuccess('✓ Email verified! Setting up your account...');
+                    showSuccess('✓ Email verified! Please login to continue...');
                     localStorage.removeItem('pendingVerificationEmail');
                     
-                    // ✅ FIX: Wait for session to fully establish
-                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    // ✅ SAFE: Just redirect to login page with verified flag
+                    localStorage.setItem('emailJustVerified', 'true');
+                    localStorage.setItem('verifiedEmail', email);
                     
-                    // ✅ FIX: Check if this user already has a role
-                    console.log('🔍 Checking user role...');
-                    
-                    try {
-                        const user = await getCurrentUser();
-                        console.log('Current user:', user);
-                        
-                        const roleResponse = await fetch(`${API_URL}/user/me`, {
-                            credentials: 'include'
-                        });
-                        
-                        const roleData = await roleResponse.json();
-                        console.log('Role check result:', roleData);
-                        
-                        if (roleData.success && roleData.role) {
-                            // ✅ Existing user with role - go to dashboard
-                            console.log('✓ User has existing role:', roleData.role);
-                            localStorage.setItem('userRole', roleData.role);
-                            
-                            if (roleData.role === 'reviewer' && roleData.data?._id) {
-                                localStorage.setItem('reviewerId', roleData.data._id);
-                            }
-                            
-                            showSuccess('✓ Welcome back! Redirecting to dashboard...');
-                            setTimeout(() => {
-                                window.location.href = '/index.html';
-                            }, 1000);
-                        } else {
-                            // ✅ New user - needs to select role
-                            console.log('→ New user, redirecting to role selection');
-                            sessionStorage.setItem('justVerified', 'true');
-                            
-                            showSuccess('✓ Verified! Please select your role...');
-                            setTimeout(() => {
-                                window.location.href = '/role-select.html';
-                            }, 1000);
-                        }
-                        
-                    } catch (roleError) {
-                        console.error('Role check error:', roleError);
-                        // Default to role selection if check fails
-                        sessionStorage.setItem('justVerified', 'true');
-                        setTimeout(() => {
-                            window.location.href = '/role-select.html';
-                        }, 1000);
-                    }
-                    
+                    setTimeout(() => {
+                        window.location.href = '/login.html';
+                    }, 2000);
                 } else {
                     showError(data.error || 'Invalid code');
                     inputs.forEach(input => input.value = '');
@@ -303,7 +253,6 @@
             canResend = false;
             showSuccess('New code sent to your email');
             
-            // Countdown
             let seconds = 60;
             const interval = setInterval(() => {
                 document.getElementById('timer').textContent = `Resend available in ${seconds}s`;
