@@ -160,12 +160,9 @@
     </div>
     
     <script type="module">
-        // ✅ SAFE VERSION - No auth calls, just verify OTP and redirect to login
         const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
             ? 'http://localhost:3000/api'
             : 'https://helpmarq-backend.onrender.com/api';
-        
-        console.log('🔗 Using API URL:', API_URL);
         
         const email = localStorage.getItem('pendingVerificationEmail');
         
@@ -211,8 +208,6 @@
             }
             
             try {
-                console.log('📨 Verifying OTP...');
-                
                 const res = await fetch(`${API_URL}/verify-otp`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -221,26 +216,24 @@
                 });
                 
                 const data = await res.json();
-                console.log('Response:', data);
                 
                 if (data.success) {
-                    showSuccess('✓ Email verified! Please login to continue...');
+                    showSuccess('✓ Email verified! Choose your role...');
                     localStorage.removeItem('pendingVerificationEmail');
                     
-                    // ✅ SAFE: Just redirect to login page with verified flag
-                    localStorage.setItem('emailJustVerified', 'true');
-                    localStorage.setItem('verifiedEmail', email);
+                    // ✅ FIXED: Go directly to role selection after OTP
+                    sessionStorage.setItem('justVerified', 'true');
                     
                     setTimeout(() => {
-                        window.location.href = '/login.html';
-                    }, 2000);
+                        window.location.href = '/role-select.html';
+                    }, 1500);
                 } else {
                     showError(data.error || 'Invalid code');
                     inputs.forEach(input => input.value = '');
                     inputs[0].focus();
                 }
             } catch (error) {
-                console.error('❌ Verification error:', error);
+                console.error('Verification error:', error);
                 showError('Verification failed. Please try again.');
             }
         });
