@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth Debugger - HelpMarq</title>
+    <style>
+        body {
+            font-family: 'Monaco', 'Courier New', monospace;
+            background: #1a1a1a;
+            color: #0f0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .section {
+            background: #000;
+            border: 2px solid #0f0;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        h1, h2 {
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+        }
+        .good { color: #0f0; font-weight: bold; }
+        .bad { color: #f00; font-weight: bold; }
+        .warning { color: #ff0; font-weight: bold; }
+        button {
+            background: #0f0;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #0ff;
+        }
+        pre {
+            background: #111;
+            padding: 10px;
+            border-left: 3px solid #0f0;
+            overflow-x: auto;
+        }
+        .cookie-item {
+            padding: 8px;
+            margin: 5px 0;
+            background: #111;
+            border-left: 3px solid #ff0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 HelpMarq Auth Debugger</h1>
+    <p>Use this tool to diagnose authentication issues</p>
+
+    <!-- BROWSER INFO -->
+    <div class="section">
+        <h2>1. Browser Information</h2>
+        <div id="browserInfo"></div>
+    </div>
+
+    <!-- COOKIES -->
+    <div class="section">
+        <h2>2. Cookies Status</h2>
+        <div id="cookiesInfo"></div>
+        <button onclick="showAllCookies()">Show All Cookies</button>
+        <button onclick="clearAllCookies()">Clear All Cookies</button>
+    </div>
+
+    <!-- LOCAL/SESSION STORAGE -->
+    <div class="section">
+        <h2>3. Storage Status</h2>
+        <div id="storageInfo"></div>
+        <button onclick="clearAllStorage()">Clear All Storage</button>
+    </div>
+
+    <!-- SESSION TEST -->
+    <div class="section">
+        <h2>4. Session Test</h2>
+        <div id="sessionTest"></div>
+        <button onclick="testSession()">Test Session</button>
+    </div>
+
+    <!-- API TEST -->
+    <div class="section">
+        <h2>5. API Connection Test</h2>
+        <div id="apiTest"></div>
+        <button onclick="testAPI()">Test API</button>
+    </div>
+
+    <!-- LOGIN TEST -->
+    <div class="section">
+        <h2>6. Test Login</h2>
+        <input type="email" id="testEmail" placeholder="Email" style="padding: 10px; width: 250px; margin: 5px;">
+        <input type="password" id="testPassword" placeholder="Password" style="padding: 10px; width: 250px; margin: 5px;">
+        <button onclick="testLogin()">Test Login</button>
+        <div id="loginTest"></div>
+    </div>
+
+    <!-- RECOMMENDATIONS -->
+    <div class="section">
+        <h2>7. Recommendations</h2>
+        <div id="recommendations"></div>
+    </div>
+
+    <script type="module">
+        import { getCurrentUser, getSession, signIn } from './lib/auth.js';
+
+        const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+            ? 'http://localhost:3000/api'
+            : 'https://helpmarq-backend.onrender.com/api';
+
+        // 1. Browser Info
+        function displayBrowserInfo() {
+            const info = document.getElementById('browserInfo');
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            const isChrome = /Chrome/.test(navigator.userAgent) && /Google Inc/.test(navigator.vendor);
+            const isFirefox = /Firefox/.test(navigator.userAgent);
+            
+            info.innerHTML = `
+                <pre>
+Browser: ${isSafari ? '<span class="warning">Safari</span>' : isChrome ? '<span class="good">Chrome</span>' : isFirefox ? 'Firefox' : 'Other'}
+User Agent: ${navigator.userAgent}
+Cookies Enabled: ${navigator.cookieEnabled ? '<span class="good">YES</span>' : '<span class="bad">NO</span>'}
+Current URL: ${window.location.href}
+API URL: ${API_URL}
+                </pre>
+            `;
+
+            if (isSafari) {
+                info.innerHTML += `<p class="warning">⚠️ SAFARI DETECTED - Known to have strict cookie policies</p>`;
+            }
+        }
+
+        // 2. Cookies
+        window.showAllCookies = function() {
+            const info = document.getElementById('cookiesInfo');
+            const cookies = document.cookie.split(';');
+            
+            let html = `<p>Total cookies: ${cookies.length}</p>`;
+            
+            const betterAuthCookie = cookies.find(c => c.includes('better-auth'));
+            
+            if (betterAuthCookie) {
+                html += `<p class="good">✓ Better Auth session cookie found!</p>`;
+                html += `<div class="cookie-item">${betterAuthCookie}</div>`;
+            } else {
+                html += `<p class="bad">✗ Better Auth session cookie NOT found!</p>`;
+                html += `<p>This is why you're getting 401 errors.</p>`;
+            }
+            
+            html += `<h3>All Cookies:</h3>`;
+            cookies.forEach(cookie => {
+                html += `<div class="cookie-item">${cookie}</div>`;
+            });
+            
+            info.innerHTML = html;
+        };
+
+        window.clearAllCookies = function() {
+            const cookies = document.cookie.split(';');
+            cookies.forEach(cookie => {
+                const eqPos = cookie.indexOf('=');
+                const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
+                document.cookie = name + '=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/';
+            });
+            alert('All cookies cleared! Reload page to see effect.');
+            showAllCookies();
+        };
+
+        // 3. Storage
+        function displayStorageInfo() {
+            const info = document.getElementById('storageInfo');
+            const localKeys = Object.keys(localStorage);
+            const sessionKeys = Object.keys(sessionStorage);
+            
+            let html = `
+                <h3>localStorage (${localKeys.length} items):</h3>
+                <pre>${JSON.stringify(localStorage, null, 2)}</pre>
+                
+                <h3>sessionStorage (${sessionKeys.length} items):</h3>
+                <pre>${JSON.stringify(sessionStorage, null, 2)}</pre>
+            `;
+            
+            info.innerHTML = html;
+        }
+
+        window.clearAllStorage = function() {
+            localStorage.clear();
+            sessionStorage.clear();
+            alert('Storage cleared! Reload page to see effect.');
+            displayStorageInfo();
+        };
+
+        // 4. Session Test
+        window.testSession = async function() {
+            const info = document.getElementById('sessionTest');
+            info.innerHTML = '<p>Testing session...</p>';
+            
+            try {
+                const session = await getSession();
+                
+                if (session) {
+                    info.innerHTML = `
+                        <p class="good">✓ SESSION ACTIVE</p>
+                        <pre>${JSON.stringify(session, null, 2)}</pre>
+                    `;
+                } else {
+                    info.innerHTML = `<p class="bad">✗ NO SESSION FOUND</p>`;
+                }
+                
+                const user = await getCurrentUser();
+                
+                if (user) {
+                    info.innerHTML += `
+                        <p class="good">✓ USER AUTHENTICATED</p>
+                        <pre>${JSON.stringify(user, null, 2)}</pre>
+                    `;
+                } else {
+                    info.innerHTML += `<p class="bad">✗ USER NOT AUTHENTICATED</p>`;
+                }
+                
+            } catch (error) {
+                info.innerHTML = `<p class="bad">✗ ERROR: ${error.message}</p>`;
+            }
+        };
+
+        // 5. API Test
+        window.testAPI = async function() {
+            const info = document.getElementById('apiTest');
+            info.innerHTML = '<p>Testing API connection...</p>';
+            
+            try {
+                // Test 1: Health check
+                const healthRes = await fetch(`${API_URL.replace('/api', '')}/health`);
+                const healthData = await healthRes.json();
+                
+                let html = `
+                    <h3>Health Check:</h3>
+                    <p class="${healthData.status === 'ok' ? 'good' : 'bad'}">
+                        Status: ${healthData.status}
+                    </p>
+                    <pre>${JSON.stringify(healthData, null, 2)}</pre>
+                `;
+                
+                // Test 2: /me endpoint
+                const meRes = await fetch(`${API_URL}/user/me`, {
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                html += `
+                    <h3>/me Endpoint:</h3>
+                    <p>Status: ${meRes.status}</p>
+                `;
+                
+                if (meRes.ok) {
+                    const meData = await meRes.json();
+                    html += `<p class="good">✓ Successfully called /me</p>`;
+                    html += `<pre>${JSON.stringify(meData, null, 2)}</pre>`;
+                } else {
+                    html += `<p class="bad">✗ Failed with ${meRes.status} (This is your 401 error!)</p>`;
+                    const errorText = await meRes.text();
+                    html += `<pre>${errorText}</pre>`;
+                }
+                
+                info.innerHTML = html;
+                
+            } catch (error) {
+                info.innerHTML = `<p class="bad">✗ API ERROR: ${error.message}</p>`;
+            }
+        };
+
+        // 6. Test Login
+        window.testLogin = async function() {
+            const info = document.getElementById('loginTest');
+            const email = document.getElementById('testEmail').value;
+            const password = document.getElementById('testPassword').value;
+            
+            if (!email || !password) {
+                info.innerHTML = '<p class="warning">⚠️ Enter email and password</p>';
+                return;
+            }
+            
+            info.innerHTML = '<p>Attempting login...</p>';
+            
+            try {
+                console.log('=== DEBUG LOGIN TEST ===');
+                console.log('Email:', email);
+                
+                const result = await signIn(email, password);
+                
+                info.innerHTML = `
+                    <p class="good">✓ LOGIN SUCCESSFUL</p>
+                    <pre>${JSON.stringify(result, null, 2)}</pre>
+                    <p>Now check cookies and session above!</p>
+                `;
+                
+                // Refresh other sections
+                showAllCookies();
+                testSession();
+                
+            } catch (error) {
+                console.error('Login test error:', error);
+                info.innerHTML = `
+                    <p class="bad">✗ LOGIN FAILED</p>
+                    <p>Error: ${error.message}</p>
+                `;
+            }
+        };
+
+        // 7. Recommendations
+        function generateRecommendations() {
+            const info = document.getElementById('recommendations');
+            const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+            const hasBetterAuthCookie = document.cookie.includes('better-auth');
+            
+            let html = '<ul>';
+            
+            if (!hasBetterAuthCookie) {
+                html += '<li class="bad">❌ NO SESSION COOKIE - You need to login first or session expired</li>';
+                html += '<li>Try: Clear cookies → Signup → OTP → Should auto-login → Check for cookie</li>';
+            } else {
+                html += '<li class="good">✓ Session cookie exists</li>';
+            }
+            
+            if (isSafari) {
+                html += '<li class="warning">⚠️ SAFARI DETECTED - Try these:</li>';
+                html += '<li>1. Safari → Preferences → Privacy → Uncheck "Prevent cross-site tracking"</li>';
+                html += '<li>2. Safari → Preferences → Privacy → Uncheck "Block all cookies"</li>';
+                html += '<li>3. Test in Chrome to isolate Safari-specific issues</li>';
+            }
+            
+            html += '<li>If login is "unreliable":</li>';
+            html += '<li>→ This means session cookies are being set SOMETIMES but not always</li>';
+            html += '<li>→ Backend needs longer wait time after login</li>';
+            html += '<li>→ Or need to add explicit session cookie setting</li>';
+            
+            html += '</ul>';
+            
+            html += `
+                <h3>Quick Fixes to Try:</h3>
+                <ol>
+                    <li><strong>Clear Everything:</strong> Click "Clear All Cookies" + "Clear All Storage" above</li>
+                    <li><strong>Fresh Signup:</strong> Do complete signup → OTP → Auto-login flow</li>
+                    <li><strong>Check Cookie:</strong> After login, click "Show All Cookies" - should see better-auth cookie</li>
+                    <li><strong>Test Session:</strong> Click "Test Session" - should show active session</li>
+                    <li><strong>If Still Failing:</strong> The backend cookie configuration needs fixing</li>
+                </ol>
+            `;
+            
+            info.innerHTML = html;
+        }
+
+        // Initialize
+        displayBrowserInfo();
+        showAllCookies();
+        displayStorageInfo();
+        generateRecommendations();
+        
+        // Auto-refresh storage display every 5 seconds
+        setInterval(displayStorageInfo, 5000);
+    </script>
+</body>
+</html>
